@@ -576,7 +576,14 @@ async fn main() {
         inner
     } else {
         tracing::info!("serving under base path: {base_path}");
-        Router::new().nest(&base_path, inner)
+        let index_file = format!("{web_dir}/index.html");
+        Router::new()
+            .nest(&base_path, inner)
+            // Handle /telemax/ (with trailing slash) which nest doesn't catch
+            .route_service(
+                &format!("{base_path}/"),
+                ServeFile::new(index_file),
+            )
     };
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
