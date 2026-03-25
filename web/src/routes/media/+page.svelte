@@ -56,14 +56,29 @@
   }
 
   async function transport(action: string) {
+    // Optimistic UI update
+    if (action === 'play') media.status = 'Playing';
+    else if (action === 'pause') media.status = 'Paused';
     try {
       await api.post(`/media/${action}`);
+      await fetchMedia();
+    } catch {
+      // ignore
+    }
+  }
+
+  async function skip(seconds: number) {
+    const newPos = Math.max(0, Math.min(duration, (media.position_ms ?? 0) + seconds * 1000));
+    media.position_ms = newPos;
+    try {
+      await api.post('/media/seek', { position_ms: newPos });
     } catch {
       // ignore
     }
   }
 
   async function toggleShuffle() {
+    media.shuffle = !media.shuffle;
     try {
       await api.post('/media/shuffle');
     } catch {
@@ -72,6 +87,8 @@
   }
 
   async function toggleRepeat() {
+    const cycle: Record<string, string> = { 'None': 'Track', 'Track': 'Playlist', 'Playlist': 'None' };
+    media.repeat = cycle[media.repeat ?? 'None'] ?? 'None';
     try {
       await api.post('/media/repeat');
     } catch {
@@ -79,8 +96,14 @@
     }
   }
 
+  let localVolume = $state<number | null>(null);
+  let volumeTimeout: ReturnType<typeof setTimeout> | undefined;
+  let displayVolume = $derived(localVolume ?? media.volume ?? 0.5);
+
   async function setVolume(vol: number) {
-    media.volume = vol;
+    localVolume = vol;
+    clearTimeout(volumeTimeout);
+    volumeTimeout = setTimeout(() => { localVolume = null; }, 2000);
     try {
       await api.post('/media/volume', { volume: vol });
     } catch {
@@ -255,6 +278,14 @@
       </svg>
     </button>
 
+    <button class="transport-btn skip" onclick={() => skip(-15)} aria-label="Back 15s">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4v6h6" />
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+        <text x="12" y="15.5" text-anchor="middle" font-size="7" fill="currentColor" stroke="none" font-weight="bold">15</text>
+      </svg>
+    </button>
+
     <button class="transport-btn play" onclick={() => transport(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
       {#if isPlaying}
         <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -266,6 +297,14 @@
           <polygon points="6,4 20,12 6,20" />
         </svg>
       {/if}
+    </button>
+
+    <button class="transport-btn skip" onclick={() => skip(15)} aria-label="Forward 15s">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6" />
+        <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10" />
+        <text x="12" y="15.5" text-anchor="middle" font-size="7" fill="currentColor" stroke="none" font-weight="bold">15</text>
+      </svg>
     </button>
 
     <button class="transport-btn" onclick={() => transport('next')} aria-label="Next">
@@ -291,10 +330,10 @@
   <div class="volume-section">
     <svg class="volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
-      {#if (media.volume ?? 0.5) > 0}
+      {#if displayVolume > 0}
         <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
       {/if}
-      {#if (media.volume ?? 0.5) > 0.5}
+      {#if displayVolume > 0.5}
         <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
       {/if}
     </svg>
@@ -304,7 +343,7 @@
       min="0"
       max="1"
       step="0.01"
-      value={media.volume ?? 0.5}
+      value={displayVolume}
       oninput={handleVolumeInput}
       aria-label="Volume"
     />
@@ -527,6 +566,16 @@
   .transport-btn.small svg {
     width: 20px;
     height: 20px;
+  }
+
+  .transport-btn.skip {
+    width: 40px;
+    height: 40px;
+  }
+
+  .transport-btn.skip svg {
+    width: 24px;
+    height: 24px;
   }
 
   .transport-btn.play {
