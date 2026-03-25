@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api.svelte';
-  import { base } from '$app/paths';
   import type { MediaState, PlayerInfo } from '$lib/types';
 
   let media = $state<MediaState>({
@@ -10,8 +9,6 @@
   let players = $state<PlayerInfo[]>([]);
   let audioBands = $state<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0]);
   const bandLabels = ['60', '150', '400', '1k', '2.5k', '6k', '12k', '16k', '20k'];
-  let artError = $state(false);
-  let artUrl = $state('');
   let seeking = $state(false);
   let seekPosition = $state(0);
   let pollTimer: ReturnType<typeof setInterval>;
@@ -40,8 +37,6 @@
     try {
       const state = await api.get<MediaState>('/media');
       media = state;
-      artError = false;
-      artUrl = `${base}/api/media/art?t=${Date.now()}`;
     } catch {
       // ignore
     }
@@ -168,8 +163,6 @@
       api.on('media_changed', (msg) => {
         if (msg.state) {
           media = msg.state;
-          artError = false;
-          artUrl = `${base}/api/media/art?t=${Date.now()}`;
         }
       }),
       api.on('media_progress', (msg) => {
@@ -206,22 +199,6 @@
       {/each}
     </div>
   {/if}
-
-  <!-- Cover art -->
-  <div class="art-container">
-    {#if artUrl && !artError}
-      <img
-        src={artUrl}
-        alt="Album art"
-        class="cover-art"
-        onerror={() => { artError = true; }}
-      />
-    {:else}
-      <div class="art-placeholder">
-        <span class="art-placeholder-text">NO ART</span>
-      </div>
-    {/if}
-  </div>
 
   <!-- Track info -->
   <div class="track-info">
@@ -374,41 +351,6 @@
   .player-tab.active {
     color: #ffffff;
     border-bottom-color: #ff2d2d;
-  }
-
-  /* Cover art */
-  .art-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    aspect-ratio: 1;
-    max-height: 40vh;
-    width: 100%;
-  }
-
-  .cover-art {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .art-placeholder {
-    width: 100%;
-    height: 100%;
-    background: #141414;
-    border: 1px solid #333333;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .art-placeholder-text {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.2em;
-    color: #333333;
   }
 
   /* Track info */
