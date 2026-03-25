@@ -53,7 +53,6 @@ in
       environment = {
         TELEMAX_PORT = toString cfg.port;
         TELEMAX_WEB_DIR = "${webPackage}";
-        TELEMAX_BASE_PATH = "/telemax";
         NIRI_SOCKET = "%t/niri-socket";
         RUST_LOG = "info";
       };

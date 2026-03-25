@@ -523,11 +523,8 @@ async fn main() {
         audio_tx,
     };
 
-    let base_path =
-        std::env::var("TELEMAX_BASE_PATH").unwrap_or_default();
-
-    // Build inner router with API routes + static file fallback
-    let inner = Router::new()
+    // Build router with API routes + static file fallback
+    let app = Router::new()
         // Status
         .route("/api/status", get(status))
         // Settings
@@ -570,21 +567,6 @@ async fn main() {
             ServeDir::new(&web_dir)
                 .not_found_service(ServeFile::new(format!("{web_dir}/index.html"))),
         );
-
-    // Nest under base path if configured (e.g., /telemax for Tailscale Serve)
-    let app = if base_path.is_empty() {
-        inner
-    } else {
-        tracing::info!("serving under base path: {base_path}");
-        let index_file = format!("{web_dir}/index.html");
-        Router::new()
-            .nest(&base_path, inner)
-            // Handle /telemax/ (with trailing slash) which nest doesn't catch
-            .route_service(
-                &format!("{base_path}/"),
-                ServeFile::new(index_file),
-            )
-    };
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     tracing::info!("listening on {}", addr);
