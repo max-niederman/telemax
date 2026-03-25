@@ -9,7 +9,7 @@
 </script>
 
 <div class="loading">
-  <p>Loading...</p>
+  <p>telemax</p>
 </div>
 
 <style>
@@ -18,6 +18,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #666;
+    color: #555555;
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 </style>

@@ -247,9 +247,9 @@
     aria-label="Trackpad touch area"
   >
     <div class="touch-hint">
-      <p>Touch to control mouse</p>
-      <p class="hint-detail">1 finger: move | tap: click</p>
-      <p class="hint-detail">2 fingers: scroll | 2-tap: right click</p>
+      <p>TOUCH TO CONTROL</p>
+      <p class="hint-detail">1 FINGER: MOVE — TAP: CLICK</p>
+      <p class="hint-detail">2 FINGERS: SCROLL — 2-TAP: RIGHT CLICK</p>
     </div>
   </div>
 
@@ -259,22 +259,22 @@
         class="mod-key"
         class:active={modifiers.ctrl}
         onclick={() => toggleModifier('ctrl')}
-      >Ctrl</button>
+      >CTRL</button>
       <button
         class="mod-key"
         class:active={modifiers.alt}
         onclick={() => toggleModifier('alt')}
-      >Alt</button>
+      >ALT</button>
       <button
         class="mod-key"
         class:active={modifiers.super_}
         onclick={() => toggleModifier('super_')}
-      >Super</button>
+      >SUPER</button>
       <button
         class="mod-key"
         class:active={modifiers.shift}
         onclick={() => toggleModifier('shift')}
-      >Shift</button>
+      >SHIFT</button>
     </div>
   {/if}
 
@@ -292,16 +292,7 @@
   />
 
   <button class="keyboard-toggle" onclick={toggleKeyboard} class:active={keyboardOpen} aria-label="Toggle keyboard">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="2" y="4" width="20" height="14" rx="2" />
-      <line x1="6" y1="8" x2="6" y2="8" />
-      <line x1="10" y1="8" x2="10" y2="8" />
-      <line x1="14" y1="8" x2="14" y2="8" />
-      <line x1="18" y1="8" x2="18" y2="8" />
-      <line x1="6" y1="12" x2="6" y2="12" />
-      <line x1="18" y1="12" x2="18" y2="12" />
-      <line x1="8" y1="16" x2="16" y2="16" />
-    </svg>
+    KB
   </button>
 </div>
 
@@ -316,10 +307,9 @@
 
   .touch-area {
     flex: 1;
-    background: #16213e;
-    border: 1px solid #0f3460;
-    margin: 8px;
-    border-radius: 12px;
+    background: #141414;
+    border: 1px solid #333333;
+    border-bottom: none;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -330,20 +320,23 @@
 
   .touch-hint {
     text-align: center;
-    color: #333;
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   .touch-hint p {
-    font-size: 16px;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
     font-weight: 500;
+    letter-spacing: 0.15em;
+    color: #333333;
     margin-bottom: 8px;
-    color: #444;
   }
 
   .touch-hint .hint-detail {
-    font-size: 12px;
-    color: #333;
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.12em;
+    color: #333333;
     margin-bottom: 4px;
   }
 
@@ -351,59 +344,52 @@
     position: absolute;
     bottom: 12px;
     right: 12px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #16213e;
-    border: 1px solid #0f3460;
-    color: #666;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #666666;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    padding: 12px;
     z-index: 10;
   }
 
-  .keyboard-toggle:active,
   .keyboard-toggle.active {
-    background: #0f3460;
-    color: #e94560;
-    border-color: #e94560;
-  }
-
-  .keyboard-toggle svg {
-    width: 24px;
-    height: 24px;
+    color: #ff2d2d;
   }
 
   .modifier-row {
     display: flex;
-    gap: 6px;
-    padding: 6px 8px;
-    background: #16213e;
-    border-top: 1px solid #0f3460;
+    gap: 0;
+    border-top: 1px solid #333333;
     flex-shrink: 0;
   }
 
   .mod-key {
     flex: 1;
-    padding: 10px 0;
-    background: #1a1a2e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    color: #888;
-    font-size: 13px;
-    font-weight: 600;
+    padding: 14px 0;
+    background: transparent;
+    border: none;
+    border-right: 1px solid #333333;
+    color: #666666;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
     text-align: center;
   }
 
+  .mod-key:last-child {
+    border-right: none;
+  }
+
   .mod-key.active {
-    background: #0f3460;
-    color: #e94560;
-    border-color: #e94560;
+    color: #ff2d2d;
   }
 
   .hidden-input {

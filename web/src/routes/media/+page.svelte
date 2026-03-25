@@ -197,11 +197,11 @@
     <div class="player-selector">
       {#each players as player}
         <button
-          class="player-pill"
+          class="player-tab"
           class:active={player.id === media.player_id}
           onclick={() => selectPlayer(player.id)}
         >
-          {player.name}
+          {player.name.toUpperCase()}
         </button>
       {/each}
     </div>
@@ -218,12 +218,7 @@
       />
     {:else}
       <div class="art-placeholder">
-        <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="40" cy="40" r="30" />
-          <circle cx="40" cy="40" r="8" />
-          <path d="M52 20 L52 44" stroke-width="3" />
-          <path d="M52 20 L62 24 L62 18 Z" fill="currentColor" stroke="none" />
-        </svg>
+        <span class="art-placeholder-text">NO ART</span>
       </div>
     {/if}
   </div>
@@ -231,8 +226,12 @@
   <!-- Track info -->
   <div class="track-info">
     <div class="track-title">{media.title || 'No media playing'}</div>
-    <div class="track-artist">{media.artist || ''}</div>
-    <div class="track-album">{media.album || ''}</div>
+    {#if media.artist}
+      <div class="track-artist">{media.artist}</div>
+    {/if}
+    {#if media.album}
+      <div class="track-album">{media.album}</div>
+    {/if}
   </div>
 
   <!-- Progress bar -->
@@ -252,7 +251,6 @@
       >
         <div class="progress-track">
           <div class="progress-fill" style="width: {progress}%"></div>
-          <div class="progress-thumb" style="left: {progress}%"></div>
         </div>
       </div>
       <div class="time-labels">
@@ -271,69 +269,34 @@
   <!-- Transport controls -->
   <div class="transport">
     {#if media.shuffle != null}
-    <button class="transport-btn small" class:toggled={shuffleOn} onclick={toggleShuffle} aria-label="Shuffle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="16,3 21,3 21,8" />
-        <line x1="4" y1="20" x2="21" y2="3" />
-        <polyline points="21,16 21,21 16,21" />
-        <line x1="15" y1="15" x2="21" y2="21" />
-        <line x1="4" y1="4" x2="9" y2="9" />
-      </svg>
+    <button class="transport-text small" class:toggled={shuffleOn} onclick={toggleShuffle} aria-label="Shuffle">
+      SHUF
     </button>
     {/if}
 
-    <button class="transport-btn" onclick={() => transport('prev')} aria-label="Previous">
-      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-        <path d="M6 6h2v12H6zM9.5 12l8.5 6V6z" />
-      </svg>
+    <button class="transport-text" onclick={() => transport('prev')} aria-label="Previous">
+      &#x27E8;&#x27E8;
     </button>
 
-    <button class="transport-btn skip" onclick={() => skip(-15)} aria-label="Back 15s">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M1 4v6h6" />
-        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-        <text x="12" y="15.5" text-anchor="middle" font-size="7" fill="currentColor" stroke="none" font-weight="bold">15</text>
-      </svg>
+    <button class="transport-text skip" onclick={() => skip(-15)} aria-label="Back 15s">
+      &minus;15
     </button>
 
-    <button class="transport-btn play" onclick={() => transport(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
-      {#if isPlaying}
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-          <rect x="6" y="4" width="4" height="16" rx="1" />
-          <rect x="14" y="4" width="4" height="16" rx="1" />
-        </svg>
-      {:else}
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-          <polygon points="6,4 20,12 6,20" />
-        </svg>
-      {/if}
+    <button class="transport-text play" onclick={() => transport(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
+      {#if isPlaying}&#x275A;&#x275A;{:else}&#x25B6;{/if}
     </button>
 
-    <button class="transport-btn skip" onclick={() => skip(15)} aria-label="Forward 15s">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M23 4v6h-6" />
-        <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10" />
-        <text x="12" y="15.5" text-anchor="middle" font-size="7" fill="currentColor" stroke="none" font-weight="bold">15</text>
-      </svg>
+    <button class="transport-text skip" onclick={() => skip(15)} aria-label="Forward 15s">
+      +15
     </button>
 
-    <button class="transport-btn" onclick={() => transport('next')} aria-label="Next">
-      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-        <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
-      </svg>
+    <button class="transport-text" onclick={() => transport('next')} aria-label="Next">
+      &#x27E9;&#x27E9;
     </button>
 
     {#if media.repeat != null}
-    <button class="transport-btn small" class:toggled={repeatMode !== 'None'} onclick={toggleRepeat} aria-label="Repeat">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="17,1 21,5 17,9" />
-        <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-        <polyline points="7,23 3,19 7,15" />
-        <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-        {#if repeatMode === 'Track'}
-          <text x="12" y="15" text-anchor="middle" font-size="8" fill="currentColor" stroke="none">1</text>
-        {/if}
-      </svg>
+    <button class="transport-text small" class:toggled={repeatMode !== 'None'} onclick={toggleRepeat} aria-label="Repeat">
+      RPT{#if repeatMode === 'Track'}&middot;1{:else if repeatMode === 'Playlist'}&middot;A{/if}
     </button>
     {/if}
   </div>
@@ -341,15 +304,7 @@
   <!-- Volume slider -->
   {#if media.volume != null}
   <div class="volume-section">
-    <svg class="volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
-      {#if displayVolume > 0}
-        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-      {/if}
-      {#if displayVolume > 0.5}
-        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-      {/if}
-    </svg>
+    <span class="volume-label">VOL</span>
     <input
       type="range"
       class="volume-slider"
@@ -360,6 +315,7 @@
       oninput={handleVolumeInput}
       aria-label="Volume"
     />
+    <span class="volume-value">{Math.round(displayVolume * 100)}</span>
   </div>
   {/if}
 
@@ -371,10 +327,9 @@
           <div class="spectrum-bar-wrap">
             <div
               class="spectrum-bar"
-              style="transform: scaleY({Math.max(0.02, level)}); --band-hue: {30 + i * 25}"
+              style="transform: scaleY({Math.max(0.02, level)})"
             ></div>
           </div>
-          <span class="spectrum-label">{bandLabels[i]}</span>
         </div>
       {/each}
     </div>
@@ -386,38 +341,39 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 12px 16px 24px;
+    padding: 16px 16px 24px;
     overflow-y: auto;
-    gap: 12px;
+    gap: 16px;
     touch-action: pan-y;
   }
 
   /* Player selector */
   .player-selector {
     display: flex;
-    gap: 8px;
+    gap: 0;
     overflow-x: auto;
-    padding: 4px 0;
     flex-shrink: 0;
+    border-bottom: 1px solid #333333;
   }
 
-  .player-pill {
-    padding: 6px 16px;
-    border-radius: 20px;
-    border: 1px solid #0f3460;
-    background: #16213e;
-    color: #888;
-    font-size: 13px;
+  .player-tab {
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    color: #666666;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     white-space: nowrap;
     cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
   }
 
-  .player-pill.active {
-    background: #7c3aed;
-    border-color: #7c3aed;
-    color: #fff;
+  .player-tab.active {
+    color: #ffffff;
+    border-bottom-color: #ff2d2d;
   }
 
   /* Cover art */
@@ -428,45 +384,44 @@
     flex-shrink: 0;
     aspect-ratio: 1;
     max-height: 40vh;
-    align-self: center;
     width: 100%;
-    max-width: 320px;
   }
 
   .cover-art {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
   .art-placeholder {
     width: 100%;
     height: 100%;
-    background: #16213e;
-    border-radius: 16px;
+    background: #141414;
+    border: 1px solid #333333;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #333;
   }
 
-  .art-placeholder svg {
-    width: 80px;
-    height: 80px;
+  .art-placeholder-text {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    color: #333333;
   }
 
   /* Track info */
   .track-info {
-    text-align: center;
+    text-align: left;
     flex-shrink: 0;
   }
 
   .track-title {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 20px;
     font-weight: 700;
-    color: #e2e8f0;
+    color: #ffffff;
     margin-bottom: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -474,8 +429,10 @@
   }
 
   .track-artist {
-    font-size: 15px;
-    color: #94a3b8;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #666666;
     margin-bottom: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -483,8 +440,10 @@
   }
 
   .track-album {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 13px;
-    color: #64748b;
+    font-weight: 300;
+    color: #333333;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -493,48 +452,34 @@
   /* Progress bar */
   .progress-section {
     flex-shrink: 0;
-    padding: 0 4px;
   }
 
   .progress-bar {
     position: relative;
-    padding: 10px 0;
+    padding: 12px 0;
     cursor: pointer;
     touch-action: none;
   }
 
   .progress-track {
-    height: 4px;
-    background: #16213e;
-    border-radius: 2px;
+    height: 1px;
+    background: #333333;
     position: relative;
     overflow: visible;
   }
 
   .progress-fill {
     height: 100%;
-    background: #7c3aed;
-    border-radius: 2px;
+    background: #ffffff;
     transition: width 0.1s linear;
-  }
-
-  .progress-thumb {
-    position: absolute;
-    top: 50%;
-    width: 14px;
-    height: 14px;
-    background: #7c3aed;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.4);
-    transition: left 0.1s linear;
   }
 
   .time-labels {
     display: flex;
     justify-content: space-between;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
     font-size: 11px;
-    color: #64748b;
+    color: #666666;
     margin-top: 4px;
   }
 
@@ -543,75 +488,56 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 0;
     flex-shrink: 0;
-    padding: 4px 0;
+    border-top: 1px solid #333333;
+    border-bottom: 1px solid #333333;
   }
 
-  .transport-btn {
-    width: 48px;
-    height: 48px;
+  .transport-text {
     border: none;
     background: transparent;
-    color: #e2e8f0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    color: #ffffff;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
     cursor: pointer;
-    border-radius: 50%;
-    transition: all 0.15s;
+    padding: 16px 12px;
+    min-width: 48px;
+    text-align: center;
   }
 
-  .transport-btn:active {
-    transform: scale(0.9);
-    background: rgba(124, 58, 237, 0.15);
+  .transport-text:active {
+    color: #ff2d2d;
   }
 
-  .transport-btn svg {
-    width: 28px;
-    height: 28px;
+  .transport-text.play {
+    font-size: 36px;
+    padding: 12px 16px;
+    line-height: 1;
   }
 
-  .transport-btn.small {
-    width: 40px;
-    height: 40px;
+  .transport-text.skip {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: #666666;
   }
 
-  .transport-btn.small svg {
-    width: 20px;
-    height: 20px;
+  .transport-text.skip:active {
+    color: #ff2d2d;
   }
 
-  .transport-btn.skip {
-    width: 40px;
-    height: 40px;
+  .transport-text.small {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #333333;
   }
 
-  .transport-btn.skip svg {
-    width: 24px;
-    height: 24px;
-  }
-
-  .transport-btn.play {
-    width: 64px;
-    height: 64px;
-    background: #7c3aed;
-    border-radius: 50%;
-    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
-  }
-
-  .transport-btn.play:active {
-    background: #6d28d9;
-    transform: scale(0.95);
-  }
-
-  .transport-btn.play svg {
-    width: 32px;
-    height: 32px;
-  }
-
-  .transport-btn.toggled {
-    color: #7c3aed;
+  .transport-text.toggled {
+    color: #ff2d2d;
   }
 
   /* Volume */
@@ -620,58 +546,63 @@
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
-    padding: 0 4px;
   }
 
-  .volume-icon {
-    width: 22px;
-    height: 22px;
-    color: #94a3b8;
+  .volume-label {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #666666;
     flex-shrink: 0;
+  }
+
+  .volume-value {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 11px;
+    color: #666666;
+    flex-shrink: 0;
+    min-width: 24px;
+    text-align: right;
   }
 
   .volume-slider {
     flex: 1;
     -webkit-appearance: none;
     appearance: none;
-    height: 4px;
-    background: #16213e;
-    border-radius: 2px;
+    height: 1px;
+    background: #333333;
     outline: none;
   }
 
   .volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 18px;
-    height: 18px;
-    background: #7c3aed;
-    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    background: #ffffff;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
   }
 
   .volume-slider::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    background: #7c3aed;
+    width: 12px;
+    height: 12px;
+    background: #ffffff;
     border: none;
-    border-radius: 50%;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
   }
 
   /* Spectrum visualizer */
   .spectrum {
     flex-shrink: 0;
-    padding: 0 4px 8px;
+    padding: 0 0 8px;
   }
 
   .spectrum-bars {
     display: flex;
     align-items: flex-end;
-    gap: 4px;
-    height: 80px;
+    gap: 6px;
+    height: 64px;
   }
 
   .spectrum-col {
@@ -684,25 +615,18 @@
 
   .spectrum-bar-wrap {
     flex: 1;
-    width: 100%;
+    width: 1px;
     display: flex;
     align-items: flex-end;
+    justify-content: center;
   }
 
   .spectrum-bar {
-    width: 100%;
+    width: 1px;
     height: 100%;
-    border-radius: 3px 3px 0 0;
-    background: hsl(var(--band-hue), 70%, 55%);
+    background: #ffffff;
     transform-origin: bottom;
     transition: transform 50ms linear;
-    min-height: 2px;
-  }
-
-  .spectrum-label {
-    font-size: 9px;
-    color: #64748b;
-    margin-top: 4px;
-    white-space: nowrap;
+    min-height: 1px;
   }
 </style>

@@ -157,30 +157,29 @@
 <div class="settings-page">
   <!-- Connection status -->
   <section class="setting-section">
-    <div class="section-label">Connection</div>
-    <div class="connection-card">
-      <div class="status-row">
-        <div class="status-dot" class:online={status.connected !== false}></div>
-        <span class="status-text">
-          {status.connected !== false ? 'Connected' : 'Disconnected'}
+    <div class="section-header">CONNECTION</div>
+    <div class="setting-group">
+      <div class="status-line">
+        <span class="status-text" class:online={status.connected !== false}>
+          {status.connected !== false ? 'CONNECTED' : 'DISCONNECTED'}
         </span>
       </div>
       {#if status.tailscale_name}
-        <div class="status-detail">
-          <span class="detail-label">Identity</span>
-          <span class="detail-value">{status.tailscale_name}</span>
+        <div class="detail-row">
+          <span class="detail-key">IDENTITY</span>
+          <span class="detail-val">{status.tailscale_name}</span>
         </div>
       {/if}
       {#if status.tailscale_ip}
-        <div class="status-detail">
-          <span class="detail-label">Tailscale IP</span>
-          <span class="detail-value">{status.tailscale_ip}</span>
+        <div class="detail-row">
+          <span class="detail-key">TAILSCALE IP</span>
+          <span class="detail-val">{status.tailscale_ip}</span>
         </div>
       {/if}
       {#if status.hostname}
-        <div class="status-detail">
-          <span class="detail-label">Host</span>
-          <span class="detail-value">{status.hostname}</span>
+        <div class="detail-row">
+          <span class="detail-key">HOST</span>
+          <span class="detail-val">{status.hostname}</span>
         </div>
       {/if}
     </div>
@@ -188,10 +187,10 @@
 
   <!-- Trackpad sensitivity -->
   <section class="setting-section">
-    <div class="section-label">Trackpad</div>
-    <div class="setting-card">
+    <div class="section-header">TRACKPAD</div>
+    <div class="setting-group">
       <div class="setting-row">
-        <span class="setting-name">Sensitivity</span>
+        <span class="setting-name">SENSITIVITY</span>
         <span class="setting-value">{settings.trackpad_sensitivity.toFixed(1)}</span>
       </div>
       <input
@@ -209,13 +208,12 @@
 
   <!-- Theme -->
   <section class="setting-section">
-    <div class="section-label">Appearance</div>
-    <div class="setting-card">
+    <div class="section-header">APPEARANCE</div>
+    <div class="setting-group">
       <div class="setting-row">
-        <span class="setting-name">Theme</span>
-        <button class="toggle-switch" class:on={settings.theme === 'dark'} onclick={toggleTheme} aria-label="Toggle theme">
-          <div class="toggle-thumb"></div>
-          <span class="toggle-label">{settings.theme === 'dark' ? 'Dark' : 'Light'}</span>
+        <span class="setting-name">THEME</span>
+        <button class="toggle-text" class:on={settings.theme === 'dark'} onclick={toggleTheme} aria-label="Toggle theme">
+          {settings.theme === 'dark' ? 'DARK' : 'LIGHT'}
         </button>
       </div>
     </div>
@@ -223,8 +221,8 @@
 
   <!-- Action buttons config -->
   <section class="setting-section">
-    <div class="section-label">Visible Actions</div>
-    <div class="setting-card">
+    <div class="section-header">VISIBLE ACTIONS</div>
+    <div class="setting-group">
       {#each ALL_NIRI_ACTIONS as action}
         <label class="checkbox-row">
           <input
@@ -232,8 +230,8 @@
             checked={settings.visible_actions.includes(action.name)}
             onchange={() => toggleAction(action.name)}
           />
-          <span class="checkbox-custom"></span>
-          <span class="checkbox-label">{action.label}</span>
+          <span class="checkbox-indicator">{settings.visible_actions.includes(action.name) ? '\u00D7' : '\u00B7'}</span>
+          <span class="checkbox-label">{action.label.toUpperCase()}</span>
         </label>
       {/each}
     </div>
@@ -241,8 +239,8 @@
 
   <!-- App shortcuts editor -->
   <section class="setting-section">
-    <div class="section-label">App Shortcuts</div>
-    <div class="setting-card">
+    <div class="section-header">APP SHORTCUTS</div>
+    <div class="setting-group">
       {#each settings.app_shortcuts as app}
         <div class="app-row">
           {#if editingAppId === app.id}
@@ -260,8 +258,8 @@
                 placeholder="Command"
               />
               <div class="app-edit-actions">
-                <button class="btn-sm save" onclick={saveEditApp}>Save</button>
-                <button class="btn-sm" onclick={cancelEditApp}>Cancel</button>
+                <button class="btn-sm save" onclick={saveEditApp}>SAVE</button>
+                <button class="btn-sm" onclick={cancelEditApp}>CANCEL</button>
               </div>
             </div>
           {:else}
@@ -270,18 +268,8 @@
               <span class="app-row-cmd">{app.command.join(' ')}</span>
             </div>
             <div class="app-actions">
-              <button class="icon-btn" onclick={() => startEditApp(app)} aria-label="Edit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
-              <button class="icon-btn danger" onclick={() => removeAppShortcut(app.id)} aria-label="Delete">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3,6 5,6 21,6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
+              <button class="text-btn" onclick={() => startEditApp(app)} aria-label="Edit">EDIT</button>
+              <button class="text-btn danger" onclick={() => removeAppShortcut(app.id)} aria-label="Delete">DEL</button>
             </div>
           {/if}
         </div>
@@ -302,17 +290,13 @@
             placeholder="Command (e.g. firefox)"
           />
           <div class="app-edit-actions">
-            <button class="btn-sm save" onclick={addAppShortcut}>Add</button>
-            <button class="btn-sm" onclick={() => { addingApp = false; }}>Cancel</button>
+            <button class="btn-sm save" onclick={addAppShortcut}>ADD</button>
+            <button class="btn-sm" onclick={() => { addingApp = false; }}>CANCEL</button>
           </div>
         </div>
       {:else}
         <button class="add-btn" onclick={() => { addingApp = true; }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add Shortcut
+          + ADD SHORTCUT
         </button>
       {/if}
     </div>
@@ -320,13 +304,13 @@
 
   <!-- Audio device -->
   <section class="setting-section">
-    <div class="section-label">Audio</div>
-    <div class="setting-card">
+    <div class="section-header">AUDIO</div>
+    <div class="setting-group">
       <div class="setting-row">
-        <span class="setting-name">Audio Device</span>
+        <span class="setting-name">AUDIO DEVICE</span>
       </div>
       <input
-        class="text-input full"
+        class="text-input"
         type="text"
         value={settings.audio_device ?? ''}
         oninput={handleAudioDevice}
@@ -339,11 +323,11 @@
   <div class="save-area">
     <button class="save-btn" class:dirty onclick={save} disabled={saving}>
       {#if saving}
-        Saving...
+        SAVING...
       {:else if saveMessage}
-        {saveMessage}
+        {saveMessage.toUpperCase()}
       {:else}
-        Save Settings
+        SAVE SETTINGS
       {/if}
     </button>
   </div>
@@ -356,76 +340,68 @@
     flex-direction: column;
     overflow-y: auto;
     touch-action: pan-y;
-    padding: 12px 0 24px;
-    gap: 20px;
+    padding: 0 0 24px;
+    gap: 0;
   }
 
-  .section-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0 16px;
-    margin-bottom: 8px;
+  .section-header {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #666666;
+    letter-spacing: 0.15em;
+    padding: 20px 16px 8px;
+    border-top: 1px solid #333333;
+  }
+
+  .setting-section:first-child .section-header {
+    border-top: none;
   }
 
   .setting-section {
     flex-shrink: 0;
   }
 
-  .setting-card,
-  .connection-card {
-    background: #16213e;
-    margin: 0 12px;
-    border-radius: 12px;
-    padding: 12px 16px;
-    border: 1px solid #0f3460;
+  .setting-group {
+    padding: 0 16px;
   }
 
   /* Connection */
-  .status-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  .status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #ef4444;
-    flex-shrink: 0;
-  }
-
-  .status-dot.online {
-    background: #22c55e;
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+  .status-line {
+    padding: 8px 0;
   }
 
   .status-text {
-    font-size: 15px;
-    font-weight: 600;
-    color: #e2e8f0;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #666666;
   }
 
-  .status-detail {
+  .status-text.online {
+    color: #ff2d2d;
+  }
+
+  .detail-row {
     display: flex;
     justify-content: space-between;
-    padding: 6px 0;
-    border-top: 1px solid rgba(15, 52, 96, 0.5);
+    padding: 8px 0;
+    border-top: 1px solid #1a1a1a;
   }
 
-  .detail-label {
-    font-size: 13px;
-    color: #64748b;
+  .detail-key {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: #666666;
   }
 
-  .detail-value {
+  .detail-val {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
     font-size: 13px;
-    color: #94a3b8;
-    font-family: monospace;
+    color: #ffffff;
   }
 
   /* Setting rows */
@@ -433,19 +409,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 44px;
+    min-height: 48px;
   }
 
   .setting-name {
-    font-size: 15px;
-    color: #e2e8f0;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #ffffff;
   }
 
   .setting-value {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
     font-size: 14px;
-    color: #7c3aed;
-    font-weight: 600;
-    font-family: monospace;
+    color: #ff2d2d;
+    font-weight: 500;
   }
 
   /* Slider */
@@ -453,9 +432,8 @@
     width: 100%;
     -webkit-appearance: none;
     appearance: none;
-    height: 4px;
-    background: #0f3460;
-    border-radius: 2px;
+    height: 1px;
+    background: #333333;
     outline: none;
     margin-top: 4px;
   }
@@ -463,63 +441,35 @@
   .slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 22px;
-    height: 22px;
-    background: #7c3aed;
-    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    background: #ffffff;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
   }
 
   .slider::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
-    background: #7c3aed;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
-  }
-
-  /* Toggle switch */
-  .toggle-switch {
-    position: relative;
-    width: 52px;
-    height: 30px;
-    background: #0f3460;
-    border-radius: 15px;
+    width: 14px;
+    height: 14px;
+    background: #ffffff;
     border: none;
     cursor: pointer;
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-    padding: 0;
   }
 
-  .toggle-switch.on {
-    background: #7c3aed;
+  /* Toggle text */
+  .toggle-text {
+    background: transparent;
+    border: none;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #666666;
+    cursor: pointer;
+    padding: 8px 0;
   }
 
-  .toggle-thumb {
-    width: 24px;
-    height: 24px;
-    background: #e2e8f0;
-    border-radius: 50%;
-    position: absolute;
-    left: 3px;
-    transition: transform 0.2s;
-  }
-
-  .toggle-switch.on .toggle-thumb {
-    transform: translateX(22px);
-  }
-
-  .toggle-label {
-    position: absolute;
-    right: -48px;
-    font-size: 13px;
-    color: #94a3b8;
-    white-space: nowrap;
+  .toggle-text.on {
+    color: #ff2d2d;
   }
 
   /* Checkbox */
@@ -529,8 +479,8 @@
     gap: 12px;
     padding: 10px 0;
     cursor: pointer;
-    border-bottom: 1px solid rgba(15, 52, 96, 0.3);
-    min-height: 44px;
+    border-bottom: 1px solid #1a1a1a;
+    min-height: 48px;
   }
 
   .checkbox-row:last-of-type {
@@ -541,42 +491,32 @@
     display: none;
   }
 
-  .checkbox-custom {
-    width: 22px;
-    height: 22px;
-    border: 2px solid #0f3460;
-    border-radius: 6px;
+  .checkbox-indicator {
+    font-size: 18px;
+    font-weight: 700;
+    color: #666666;
     flex-shrink: 0;
-    position: relative;
-    transition: all 0.15s;
+    width: 18px;
+    text-align: center;
+    line-height: 1;
   }
 
-  .checkbox-row input:checked + .checkbox-custom {
-    background: #7c3aed;
-    border-color: #7c3aed;
-  }
-
-  .checkbox-row input:checked + .checkbox-custom::after {
-    content: '';
-    position: absolute;
-    left: 6px;
-    top: 2px;
-    width: 6px;
-    height: 11px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
+  .checkbox-row input:checked ~ .checkbox-indicator {
+    color: #ff2d2d;
   }
 
   .checkbox-label {
-    font-size: 14px;
-    color: #e2e8f0;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    color: #ffffff;
   }
 
   /* App shortcuts */
   .app-row {
     padding: 10px 0;
-    border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+    border-bottom: 1px solid #1a1a1a;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -594,16 +534,17 @@
 
   .app-row-name {
     display: block;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 14px;
-    color: #e2e8f0;
     font-weight: 500;
+    color: #ffffff;
   }
 
   .app-row-cmd {
     display: block;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
     font-size: 12px;
-    color: #64748b;
-    font-family: monospace;
+    color: #666666;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -611,36 +552,28 @@
 
   .app-actions {
     display: flex;
-    gap: 4px;
+    gap: 8px;
     flex-shrink: 0;
   }
 
-  .icon-btn {
-    width: 36px;
-    height: 36px;
-    border: none;
+  .text-btn {
     background: transparent;
-    color: #64748b;
+    border: none;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #666666;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    transition: all 0.15s;
+    padding: 8px 4px;
   }
 
-  .icon-btn:active {
-    background: rgba(124, 58, 237, 0.1);
+  .text-btn:active {
+    color: #ff2d2d;
   }
 
-  .icon-btn.danger:active {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-  }
-
-  .icon-btn svg {
-    width: 18px;
-    height: 18px;
+  .text-btn.danger:active {
+    color: #ff2d2d;
   }
 
   .app-edit-form,
@@ -659,105 +592,99 @@
 
   .text-input {
     width: 100%;
-    padding: 10px 12px;
-    background: #1a1a2e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    color: #e2e8f0;
+    padding: 10px 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #333333;
+    color: #ffffff;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 14px;
+    font-weight: 300;
     outline: none;
     transition: border-color 0.2s;
   }
 
   .text-input:focus {
-    border-color: #7c3aed;
+    border-bottom-color: #ff2d2d;
   }
 
-  .text-input.full {
-    margin-top: 8px;
+  .text-input::placeholder {
+    color: #333333;
   }
 
   .btn-sm {
-    padding: 8px 16px;
-    border: 1px solid #0f3460;
-    background: #1a1a2e;
-    color: #94a3b8;
-    border-radius: 8px;
-    font-size: 13px;
+    padding: 10px 16px;
+    border: 1px solid #333333;
+    background: transparent;
+    color: #666666;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     cursor: pointer;
-    transition: all 0.15s;
   }
 
   .btn-sm.save {
-    background: #7c3aed;
-    border-color: #7c3aed;
-    color: white;
+    border-color: #ff2d2d;
+    color: #ff2d2d;
   }
 
   .btn-sm:active {
-    transform: scale(0.95);
+    color: #ffffff;
   }
 
   .add-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
     width: 100%;
-    padding: 12px;
+    padding: 14px;
     background: transparent;
-    border: 1px dashed #0f3460;
-    border-radius: 8px;
-    color: #64748b;
-    font-size: 14px;
+    border: 1px solid #333333;
+    color: #666666;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     cursor: pointer;
     margin-top: 8px;
-    transition: all 0.15s;
   }
 
   .add-btn:active {
-    background: rgba(124, 58, 237, 0.05);
-    border-color: #7c3aed;
-    color: #7c3aed;
-  }
-
-  .add-btn svg {
-    width: 18px;
-    height: 18px;
+    color: #ff2d2d;
+    border-color: #ff2d2d;
   }
 
   /* Save button */
   .save-area {
-    padding: 12px 16px;
+    padding: 20px 16px;
     flex-shrink: 0;
   }
 
   .save-btn {
     width: 100%;
-    padding: 14px;
-    background: #16213e;
-    border: 1px solid #0f3460;
-    border-radius: 12px;
-    color: #94a3b8;
-    font-size: 16px;
-    font-weight: 600;
+    padding: 16px;
+    background: transparent;
+    border: 1px solid #333333;
+    color: #666666;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
     cursor: pointer;
-    transition: all 0.2s;
   }
 
   .save-btn.dirty {
-    background: #7c3aed;
-    border-color: #7c3aed;
-    color: white;
-    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+    border-color: #ff2d2d;
+    color: #ff2d2d;
   }
 
   .save-btn:active {
-    transform: scale(0.98);
+    color: #ffffff;
   }
 
   .save-btn:disabled {
-    opacity: 0.6;
+    opacity: 0.4;
     cursor: default;
   }
 </style>
