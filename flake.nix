@@ -10,9 +10,23 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
+
+        web = pkgs.buildNpmPackage {
+          pname = "niri-remote-web";
+          version = "0.1.0";
+          src = ./web;
+          npmDepsHash = pkgs.lib.fakeHash;
+
+          buildPhase = ''
+            npm run build
+          '';
+
+          installPhase = ''
+            cp -r build $out
+          '';
+        };
+
+        server = pkgs.rustPlatform.buildRustPackage {
           pname = "niri-remote-server";
           version = "0.1.0";
           src = ./server;
@@ -21,19 +35,25 @@
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = [ pkgs.libpulseaudio ];
         };
+      in
+      {
+        packages = {
+          default = server;
+          inherit server web;
+        };
 
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [
-            pkgs.cargo
-            pkgs.rustc
-            pkgs.rust-analyzer
-            pkgs.clippy
-            pkgs.pkg-config
-            pkgs.nodejs
+          nativeBuildInputs = with pkgs; [
+            cargo
+            rustc
+            rust-analyzer
+            clippy
+            pkg-config
+            nodejs
           ];
 
-          buildInputs = [
-            pkgs.libpulseaudio
+          buildInputs = with pkgs; [
+            libpulseaudio
           ];
         };
       }
