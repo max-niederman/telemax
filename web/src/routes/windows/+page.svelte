@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { api } from '$lib/api';
+  import { api } from '$lib/api.svelte';
   import type { Settings, AppShortcut } from '$lib/types';
 
   interface NiriWindow {

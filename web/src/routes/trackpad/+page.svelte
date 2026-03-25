@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { api } from '$lib/api';
+  import { api } from '$lib/api.svelte';
 
   // Touch tracking state
   let touchArea: HTMLDivElement;

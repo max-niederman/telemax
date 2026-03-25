@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api } from '$lib/api';
+  import { api } from '$lib/api.svelte';
   import { page } from '$app/stores';
   import { base } from '$app/paths';
 

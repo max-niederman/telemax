@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { api } from '$lib/api';
+  import { api } from '$lib/api.svelte';
   import { base } from '$app/paths';
   import type { MediaState, PlayerInfo } from '$lib/types';
 
