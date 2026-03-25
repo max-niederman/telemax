@@ -161,7 +161,7 @@ async fn handle_ws_input(
             input.mouse_move(dx * sensitivity, dy * sensitivity).await;
         }
         WsInput::MouseButton { button, state } => {
-            let pressed = state == "pressed";
+            let pressed = state == "press";
             input.mouse_button(button, pressed).await;
         }
         WsInput::Scroll { dx, dy } => {

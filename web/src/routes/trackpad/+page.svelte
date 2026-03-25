@@ -100,12 +100,12 @@
       if (elapsed < 200 && moved < 10) {
         if (lastTouchCount === 1 && e.touches.length === 0) {
           // Single tap -> left click
-          api.send({ type: 'mouse_button', button: 'left', action: 'press' });
-          api.send({ type: 'mouse_button', button: 'left', action: 'release' });
+          api.send({ type: 'mouse_button', button: 'left', state: 'press' });
+          api.send({ type: 'mouse_button', button: 'left', state: 'release' });
         } else if (lastTouchCount === 2 && e.touches.length <= 1) {
           // Two-finger tap -> right click
-          api.send({ type: 'mouse_button', button: 'right', action: 'press' });
-          api.send({ type: 'mouse_button', button: 'right', action: 'release' });
+          api.send({ type: 'mouse_button', button: 'right', state: 'press' });
+          api.send({ type: 'mouse_button', button: 'right', state: 'release' });
         }
       }
 
@@ -408,10 +408,11 @@
 
   .hidden-input {
     position: absolute;
-    left: -9999px;
-    top: -9999px;
+    bottom: 0;
+    left: 50%;
     width: 1px;
     height: 1px;
     opacity: 0;
+    pointer-events: none;
   }
 </style>

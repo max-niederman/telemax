@@ -89,6 +89,19 @@ impl MediaController {
     }
 
     pub async fn get_state(&self) -> Result<MediaState, String> {
+        // Auto-select the first available player if none is selected
+        {
+            let selected = self.selected_player.read().await;
+            if selected.is_none() {
+                drop(selected);
+                if let Ok(players) = self.list_players().await {
+                    if let Some(first) = players.first() {
+                        self.select_player(&first.id).await;
+                    }
+                }
+            }
+        }
+
         let proxy = self.player_proxy().await?;
         let player_id = self.get_selected_player().await.ok();
 
