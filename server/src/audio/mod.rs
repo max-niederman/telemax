@@ -11,16 +11,30 @@ use pulse::mainloop::standard::{IterateResult, Mainloop};
 use pulse::sample::{Format, Spec};
 use pulse::stream::{FlagSet as StreamFlagSet, PeekResult, Stream};
 
+use rustfft::num_complex::Complex;
+use rustfft::FftPlanner;
+
 use tokio::sync::broadcast;
+
+const SAMPLE_RATE: u32 = 48000;
+const FFT_SIZE: usize = 2048;
+const NUM_BANDS: usize = 9;
+
+/// Frequency band edges in Hz. 9 bands between 10 consecutive edges.
+const BAND_EDGES: [f32; NUM_BANDS + 1] = [
+    30.0, 60.0, 150.0, 400.0, 1000.0, 2500.0, 6000.0, 12000.0, 16000.0, 20000.0,
+];
+
+/// Smoothing factor for exponential moving average (0.0 = no update, 1.0 = no smoothing).
+const SMOOTH_ALPHA: f32 = 0.3;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AudioLevel {
-    pub left: f32,
-    pub right: f32,
+    pub bands: Vec<f32>,
 }
 
 /// Spawns a dedicated thread that monitors audio levels from the default sink's
-/// monitor source using PulseAudio peak detection.
+/// monitor source using FFT-based frequency analysis.
 ///
 /// Sends approximately 30 `AudioLevel` messages per second on the broadcast channel.
 /// If PulseAudio connection fails, logs the error and returns without panicking.
@@ -51,7 +65,9 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
     loop {
         match mainloop.borrow_mut().iterate(true) {
             IterateResult::Quit(_) | IterateResult::Err(_) => {
-                return Err("PulseAudio mainloop iterate failed while waiting for context".into());
+                return Err(
+                    "PulseAudio mainloop iterate failed while waiting for context".into(),
+                );
             }
             IterateResult::Success(_) => {}
         }
@@ -66,7 +82,6 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
 
     // Query the default sink name via server info, then get its monitor source.
     let monitor_source: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-    let channels: Rc<RefCell<Option<u8>>> = Rc::new(RefCell::new(None));
 
     // Step 1: Get default sink name from server info.
     let default_sink_name: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
@@ -102,7 +117,6 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
     // Step 2: Get monitor source name from sink info.
     {
         let monitor_ref = Rc::clone(&monitor_source);
-        let channels_ref = Rc::clone(&channels);
         let _op = context
             .borrow()
             .introspect()
@@ -111,8 +125,6 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
                     if let Some(ref name) = info.monitor_source_name {
                         *monitor_ref.borrow_mut() = Some(name.to_string());
                     }
-                    *channels_ref.borrow_mut() =
-                        Some(info.sample_spec.channels.min(2).max(1));
                 }
             });
 
@@ -134,21 +146,14 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
         .clone()
         .ok_or("No monitor source found for default sink")?;
 
-    let num_channels = channels.borrow().unwrap_or(2);
+    tracing::info!("Monitoring audio from source: {} (mono)", source_name);
 
-    tracing::info!(
-        "Monitoring audio from source: {} ({} channels)",
-        source_name,
-        num_channels
-    );
-
-    // Step 3: Create a recording stream with peak detection on the monitor source.
-    // We use Float32 format so peak values come back as f32 in [-1.0, 1.0].
-    // Sample rate of 25 Hz gives us ~25 peak readings per second.
+    // Step 3: Create a recording stream on the monitor source.
+    // Record mono Float32 at 48000 Hz for FFT analysis.
     let spec = Spec {
         format: Format::F32le,
-        channels: num_channels,
-        rate: 25,
+        channels: 1,
+        rate: SAMPLE_RATE,
     };
 
     if !spec.is_valid() {
@@ -156,24 +161,21 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
     }
 
     let stream = Rc::new(RefCell::new(
-        Stream::new(&mut context.borrow_mut(), "telemax-peak", &spec, None)
+        Stream::new(&mut context.borrow_mut(), "telemax-fft", &spec, None)
             .ok_or("Failed to create PulseAudio stream")?,
     ));
 
-    // Buffer attributes: fragsize controls how often we get data for recording.
-    // With Float32 stereo at 25 Hz, one frame is 4 bytes * 2 channels = 8 bytes.
-    // We want one frame per callback.
-    let frame_size = 4 * num_channels as u32; // 4 bytes per f32 sample * channels
+    // Buffer attributes: fragsize = FFT_SIZE * 4 bytes per f32 sample.
+    let fragsize = (FFT_SIZE as u32) * 4;
     let attr = BufferAttr {
         maxlength: u32::MAX,
         tlength: u32::MAX,
         prebuf: u32::MAX,
         minreq: u32::MAX,
-        fragsize: frame_size,
+        fragsize,
     };
 
-    let flags =
-        StreamFlagSet::PEAK_DETECT | StreamFlagSet::ADJUST_LATENCY | StreamFlagSet::DONT_MOVE;
+    let flags = StreamFlagSet::ADJUST_LATENCY | StreamFlagSet::DONT_MOVE;
 
     stream
         .borrow_mut()
@@ -197,12 +199,43 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
         }
     }
 
-    tracing::info!("Audio peak monitoring stream ready");
+    tracing::info!("Audio FFT monitoring stream ready");
 
-    // Step 4: Set up the read callback and run the mainloop.
+    // Step 4: Set up the read callback with FFT processing.
     {
         let stream_ref = Rc::clone(&stream);
-        let ch = num_channels;
+        let mut sample_buffer: Vec<f32> = Vec::with_capacity(FFT_SIZE * 2);
+        let mut smoothed_bands: Vec<f32> = vec![0.0; NUM_BANDS];
+        let mut running_max: f32 = 1e-6; // avoid division by zero
+
+        // Precompute Hann window.
+        let hann_window: Vec<f32> = (0..FFT_SIZE)
+            .map(|i| {
+                0.5 * (1.0
+                    - (2.0 * std::f32::consts::PI * i as f32 / (FFT_SIZE as f32 - 1.0)).cos())
+            })
+            .collect();
+
+        // Precompute bin-to-band mapping.
+        let bin_freq = |bin: usize| -> f32 { bin as f32 * SAMPLE_RATE as f32 / FFT_SIZE as f32 };
+        let band_bin_ranges: Vec<(usize, usize)> = (0..NUM_BANDS)
+            .map(|b| {
+                let f_low = BAND_EDGES[b];
+                let f_high = BAND_EDGES[b + 1];
+                let bin_low = (f_low / bin_freq(1)).ceil() as usize;
+                let bin_high = (f_high / bin_freq(1)).ceil() as usize;
+                let bin_high = bin_high.min(FFT_SIZE / 2);
+                (bin_low, bin_high)
+            })
+            .collect();
+
+        let mut planner = FftPlanner::<f32>::new();
+        let fft = planner.plan_fft_forward(FFT_SIZE);
+        let mut fft_input: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); FFT_SIZE];
+
+        // Target interval: ~33ms = 48000 * 0.033 ≈ 1584 samples between FFT runs.
+        let samples_per_frame: usize = (SAMPLE_RATE as f64 * 0.033) as usize;
+
         stream
             .borrow_mut()
             .set_read_callback(Some(Box::new(move |_readable_bytes| {
@@ -210,9 +243,17 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
                 loop {
                     match stream_ref.borrow_mut().peek() {
                         Ok(PeekResult::Data(data)) => {
-                            let level = extract_peak_level(data, ch);
-                            // Ignore send errors (no receivers).
-                            let _ = tx.send(level);
+                            // Parse f32 samples from raw bytes.
+                            let num_samples = data.len() / 4;
+                            for i in 0..num_samples {
+                                let offset = i * 4;
+                                if offset + 4 <= data.len() {
+                                    let sample = f32::from_le_bytes(
+                                        data[offset..offset + 4].try_into().unwrap(),
+                                    );
+                                    sample_buffer.push(sample);
+                                }
+                            }
                         }
                         Ok(PeekResult::Hole(_)) => {
                             // Hole in the data, skip it.
@@ -225,9 +266,65 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
                         }
                     }
                     // Discard the peeked fragment.
-                    if let Err(_) = stream_ref.borrow_mut().discard() {
+                    if stream_ref.borrow_mut().discard().is_err() {
                         break;
                     }
+                }
+
+                // Process FFT whenever we have enough samples.
+                while sample_buffer.len() >= FFT_SIZE {
+                    // Apply Hann window and fill FFT input buffer.
+                    for i in 0..FFT_SIZE {
+                        fft_input[i] = Complex::new(
+                            sample_buffer[i] * hann_window[i],
+                            0.0,
+                        );
+                    }
+
+                    // Run FFT in-place.
+                    fft.process(&mut fft_input);
+
+                    // Compute magnitude for each band.
+                    let mut raw_bands = vec![0.0f32; NUM_BANDS];
+                    for (b, &(bin_low, bin_high)) in band_bin_ranges.iter().enumerate() {
+                        if bin_high > bin_low {
+                            let mut sum = 0.0f32;
+                            for bin in bin_low..bin_high {
+                                sum += fft_input[bin].norm();
+                            }
+                            raw_bands[b] = sum / (bin_high - bin_low) as f32;
+                        }
+                    }
+
+                    // Update running max with slow decay.
+                    let current_max = raw_bands.iter().copied().fold(0.0f32, f32::max);
+                    if current_max > running_max {
+                        running_max = current_max;
+                    } else {
+                        // Slow decay so the normalization adapts over time.
+                        running_max *= 0.999;
+                        if running_max < 1e-6 {
+                            running_max = 1e-6;
+                        }
+                    }
+
+                    // Normalize and apply smoothing.
+                    for b in 0..NUM_BANDS {
+                        let normalized = (raw_bands[b] / running_max).clamp(0.0, 1.0);
+                        smoothed_bands[b] =
+                            smoothed_bands[b] * (1.0 - SMOOTH_ALPHA) + normalized * SMOOTH_ALPHA;
+                    }
+
+                    // Send the level.
+                    let level = AudioLevel {
+                        bands: smoothed_bands.clone(),
+                    };
+                    let _ = tx.send(level);
+
+                    // Advance by samples_per_frame (hop size) rather than FFT_SIZE
+                    // to get overlapping windows and smoother updates (~30 fps).
+                    let advance = samples_per_frame.min(sample_buffer.len());
+                    sample_buffer.drain(..advance);
                 }
             })));
     }
@@ -243,29 +340,6 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
                 return Err(format!("PulseAudio mainloop error: {:?}", e));
             }
             IterateResult::Success(_) => {}
-        }
-    }
-}
-
-/// Extracts peak audio levels from raw f32le sample data.
-/// With PEAK_DETECT, PA returns single samples representing peak levels.
-fn extract_peak_level(data: &[u8], channels: u8) -> AudioLevel {
-    let sample_size = 4; // f32 = 4 bytes
-
-    if channels >= 2 && data.len() >= sample_size * 2 {
-        let left = f32::from_le_bytes(data[0..4].try_into().unwrap()).abs();
-        let right = f32::from_le_bytes(data[4..8].try_into().unwrap()).abs();
-        AudioLevel { left, right }
-    } else if data.len() >= sample_size {
-        let mono = f32::from_le_bytes(data[0..4].try_into().unwrap()).abs();
-        AudioLevel {
-            left: mono,
-            right: mono,
-        }
-    } else {
-        AudioLevel {
-            left: 0.0,
-            right: 0.0,
         }
     }
 }

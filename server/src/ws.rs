@@ -34,7 +34,7 @@ enum WsInput {
 #[allow(dead_code)]
 enum WsOutput {
     #[serde(rename = "audio_level")]
-    AudioLevel { left: f32, right: f32 },
+    AudioLevel { bands: Vec<f32> },
     #[serde(rename = "media_progress")]
     MediaProgress {
         position_ms: i64,
@@ -80,8 +80,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             match audio_rx.recv().await {
                 Ok(level) => {
                     let msg = WsOutput::AudioLevel {
-                        left: level.left,
-                        right: level.right,
+                        bands: level.bands,
                     };
                     if audio_out_tx.send(msg).await.is_err() {
                         break;

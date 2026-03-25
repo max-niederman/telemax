@@ -8,7 +8,8 @@
     status: 'stopped',
   });
   let players = $state<PlayerInfo[]>([]);
-  let audioLevels = $state({ left: 0, right: 0 });
+  let audioBands = $state<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const bandLabels = ['60', '150', '400', '1k', '2.5k', '6k', '12k', '16k', '20k'];
   let artError = $state(false);
   let artUrl = $state('');
   let seeking = $state(false);
@@ -154,7 +155,9 @@
         }
       }),
       api.on('audio_level', (msg) => {
-        audioLevels = { left: msg.left ?? 0, right: msg.right ?? 0 };
+        if (Array.isArray(msg.bands)) {
+          audioBands = msg.bands.map((v: number) => Math.max(0, Math.min(1, v ?? 0)));
+        }
       })
     );
   });
@@ -307,19 +310,20 @@
     />
   </div>
 
-  <!-- Audio level visualizer -->
-  <div class="vu-meter">
-    <div class="vu-channel">
-      <span class="vu-label">L</span>
-      <div class="vu-track">
-        <div class="vu-fill" style="width: {Math.min(100, audioLevels.left * 100)}%"></div>
-      </div>
-    </div>
-    <div class="vu-channel">
-      <span class="vu-label">R</span>
-      <div class="vu-track">
-        <div class="vu-fill" style="width: {Math.min(100, audioLevels.right * 100)}%"></div>
-      </div>
+  <!-- Audio spectrum visualizer -->
+  <div class="spectrum">
+    <div class="spectrum-bars">
+      {#each audioBands as level, i}
+        <div class="spectrum-col">
+          <div class="spectrum-bar-wrap">
+            <div
+              class="spectrum-bar"
+              style="transform: scaleY({Math.max(0.02, level)}); --band-hue: {30 + i * 25}"
+            ></div>
+          </div>
+          <span class="spectrum-label">{bandLabels[i]}</span>
+        </div>
+      {/each}
     </div>
   </div>
 </div>
@@ -594,41 +598,48 @@
     box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
   }
 
-  /* VU meter */
-  .vu-meter {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  /* Spectrum visualizer */
+  .spectrum {
     flex-shrink: 0;
     padding: 0 4px;
   }
 
-  .vu-channel {
+  .spectrum-bars {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: flex-end;
+    gap: 4px;
+    height: 80px;
   }
 
-  .vu-label {
-    font-size: 11px;
-    color: #64748b;
-    width: 12px;
-    text-align: center;
-    font-weight: 600;
-  }
-
-  .vu-track {
+  .spectrum-col {
     flex: 1;
-    height: 6px;
-    background: #16213e;
-    border-radius: 3px;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
   }
 
-  .vu-fill {
+  .spectrum-bar-wrap {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .spectrum-bar {
+    width: 100%;
     height: 100%;
-    border-radius: 3px;
-    background: linear-gradient(90deg, #22c55e 0%, #22c55e 60%, #eab308 75%, #ef4444 100%);
-    transition: width 0.08s linear;
+    border-radius: 3px 3px 0 0;
+    background: hsl(var(--band-hue), 70%, 55%);
+    transform-origin: bottom;
+    transition: transform 50ms linear;
+    min-height: 2px;
+  }
+
+  .spectrum-label {
+    font-size: 9px;
+    color: #64748b;
+    margin-top: 4px;
+    white-space: nowrap;
   }
 </style>
