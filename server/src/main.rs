@@ -563,11 +563,11 @@ async fn main() {
         .layer(middleware::from_fn(auth::require_tailscale_auth))
         // Shared state
         .with_state(app_state)
-        // Static files fallback (append_index_html_on_directories + SPA fallback)
+        // Static files fallback with SPA fallback to index.html
         .fallback_service(
             ServeDir::new(&web_dir)
                 .append_index_html_on_directories(true)
-                .fallback(ServeFile::new(format!("{web_dir}/index.html"))),
+                .not_found_service(ServeFile::new(format!("{web_dir}/index.html"))),
         );
 
     // Nest under base path if configured (e.g., /telemax for Tailscale Serve)
