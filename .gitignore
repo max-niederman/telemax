@@ -1,0 +1,8 @@
+/target
+/result
+/server/target
+/web/node_modules
+/web/.svelte-kit
+/web/build
+.direnv
+.superpowers
