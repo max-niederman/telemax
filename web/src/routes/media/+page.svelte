@@ -236,29 +236,37 @@
   </div>
 
   <!-- Progress bar -->
-  <div class="progress-section">
-    <div
-      class="progress-bar"
-      role="slider"
-      tabindex="0"
-      aria-label="Seek"
-      aria-valuemin={0}
-      aria-valuemax={duration}
-      aria-valuenow={elapsed}
-      onpointerdown={handleProgressPointerDown}
-      onpointermove={handleProgressPointerMove}
-      onpointerup={handleProgressPointerUp}
-    >
-      <div class="progress-track">
-        <div class="progress-fill" style="width: {progress}%"></div>
-        <div class="progress-thumb" style="left: {progress}%"></div>
+  {#if duration > 0}
+    <div class="progress-section">
+      <div
+        class="progress-bar"
+        role="slider"
+        tabindex="0"
+        aria-label="Seek"
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={elapsed}
+        onpointerdown={handleProgressPointerDown}
+        onpointermove={handleProgressPointerMove}
+        onpointerup={handleProgressPointerUp}
+      >
+        <div class="progress-track">
+          <div class="progress-fill" style="width: {progress}%"></div>
+          <div class="progress-thumb" style="left: {progress}%"></div>
+        </div>
+      </div>
+      <div class="time-labels">
+        <span>{formatTime(elapsed)}</span>
+        <span>{formatTime(duration)}</span>
       </div>
     </div>
-    <div class="time-labels">
-      <span>{formatTime(elapsed)}</span>
-      <span>{formatTime(duration)}</span>
+  {:else if elapsed > 0}
+    <div class="progress-section">
+      <div class="time-labels" style="justify-content: center">
+        <span>{formatTime(elapsed)}</span>
+      </div>
     </div>
-  </div>
+  {/if}
 
   <!-- Transport controls -->
   <div class="transport">
@@ -327,6 +335,7 @@
   </div>
 
   <!-- Volume slider -->
+  {#if media.volume != null}
   <div class="volume-section">
     <svg class="volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
@@ -348,6 +357,7 @@
       aria-label="Volume"
     />
   </div>
+  {/if}
 
   <!-- Audio spectrum visualizer -->
   <div class="spectrum">
@@ -372,7 +382,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 12px 16px;
+    padding: 12px 16px 24px;
     overflow-y: auto;
     gap: 12px;
     touch-action: pan-y;
@@ -650,7 +660,7 @@
   /* Spectrum visualizer */
   .spectrum {
     flex-shrink: 0;
-    padding: 0 4px;
+    padding: 0 4px 8px;
   }
 
   .spectrum-bars {
