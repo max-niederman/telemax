@@ -1,5 +1,7 @@
 mod auth;
 mod error;
+mod input;
+mod niri;
 mod settings;
 
 use axum::{Json, Router, middleware, routing::get};
