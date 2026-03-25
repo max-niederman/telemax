@@ -15,7 +15,7 @@
           pname = "niri-remote-web";
           version = "0.1.0";
           src = ./web;
-          npmDepsHash = pkgs.lib.fakeHash;
+          npmDepsHash = "sha256-8+iZKGIQgl+IAYvfC4P75SdUH+qXq4YenepMiRzrNM4=";
 
           buildPhase = ''
             npm run build
@@ -30,7 +30,7 @@
           pname = "niri-remote-server";
           version = "0.1.0";
           src = ./server;
-          cargoHash = pkgs.lib.fakeHash;
+          cargoHash = "sha256-J4rSnXp2fqWuj7A+G3vkzuYKMwfad+5YOdnrcjs2sEA=";
 
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = [ pkgs.libpulseaudio ];
