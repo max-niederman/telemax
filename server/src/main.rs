@@ -79,24 +79,27 @@ async fn post_input_key(
     State(state): State<AppState>,
     Json(body): Json<KeyInput>,
 ) -> ApiResult<StatusCode> {
+    let input = state.input.as_ref()
+        .ok_or_else(|| ApiError::unavailable("INPUT_UNAVAILABLE", "Virtual input not available (uinput inaccessible)"))?;
+
     let linux_key = input::keymap::js_key_to_linux(&body.key)
         .ok_or_else(|| ApiError::bad_request(format!("Unknown key: {}", body.key)))?;
 
     // Press modifiers
     for m in &body.modifiers {
         if let Some(mod_key) = input::keymap::js_key_to_linux(m) {
-            state.input.key_press(mod_key).await;
+            input.key_press(mod_key).await;
         }
     }
 
     // Press and release key
-    state.input.key_press(linux_key).await;
-    state.input.key_release(linux_key).await;
+    input.key_press(linux_key).await;
+    input.key_release(linux_key).await;
 
     // Release modifiers in reverse
     for m in body.modifiers.iter().rev() {
         if let Some(mod_key) = input::keymap::js_key_to_linux(m) {
-            state.input.key_release(mod_key).await;
+            input.key_release(mod_key).await;
         }
     }
 
@@ -111,9 +114,11 @@ struct TypeInput {
 async fn post_input_type(
     State(state): State<AppState>,
     Json(body): Json<TypeInput>,
-) -> StatusCode {
-    state.input.type_text(&body.text).await;
-    StatusCode::NO_CONTENT
+) -> ApiResult<StatusCode> {
+    let input = state.input.as_ref()
+        .ok_or_else(|| ApiError::unavailable("INPUT_UNAVAILABLE", "Virtual input not available"))?;
+    input.type_text(&body.text).await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------
@@ -486,19 +491,13 @@ async fn main() {
 
     // Create VirtualInput (log error and continue if /dev/uinput unavailable)
     let virtual_input = match input::VirtualInput::new() {
-        Ok(vi) => vi,
+        Ok(vi) => Some(vi),
         Err(e) => {
-            tracing::error!(
+            tracing::warn!(
                 "Failed to create virtual input (is /dev/uinput accessible?): {e}"
             );
-            tracing::warn!("Continuing without virtual input — input endpoints will fail");
-            // Create a dummy that will fail on use; we still need Arc<VirtualInput>
-            // Since VirtualInput::new() is the only constructor and it requires /dev/uinput,
-            // we cannot proceed without it. We'll panic here with a clear message if needed,
-            // but let's try creating it anyway — the error is already logged.
-            // For now, just exit gracefully since we can't construct the type without uinput.
-            tracing::error!("Cannot start without /dev/uinput access");
-            std::process::exit(1);
+            tracing::warn!("Continuing without virtual input — input endpoints will return 503");
+            None
         }
     };
 

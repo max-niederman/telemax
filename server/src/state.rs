@@ -9,7 +9,7 @@ use crate::settings::Settings;
 #[derive(Clone)]
 pub struct AppState {
     pub settings: Arc<RwLock<Settings>>,
-    pub input: Arc<VirtualInput>,
+    pub input: Option<Arc<VirtualInput>>,
     pub media: Arc<MediaController>,
     pub audio_tx: broadcast::Sender<AudioLevel>,
 }

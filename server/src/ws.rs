@@ -130,7 +130,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 let parsed: Result<WsInput, _> = serde_json::from_str(&text);
                 match parsed {
                     Ok(ws_input) => {
-                        handle_ws_input(&ws_input, &input, &settings).await;
+                        if let Some(ref input) = input {
+                            handle_ws_input(&ws_input, input, &settings).await;
+                        }
                     }
                     Err(e) => {
                         tracing::warn!("Invalid WS message: {e}");
