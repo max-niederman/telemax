@@ -15,3 +15,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 niri-ipc = "25.11"
 zbus = "5"
 libpulse-binding = "2"
+futures = "0.3"
