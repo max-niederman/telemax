@@ -1,0 +1,633 @@
+<script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
+  import { api } from '$lib/api';
+  import type { MediaState, PlayerInfo } from '$lib/types';
+
+  let media = $state<MediaState>({
+    status: 'stopped',
+  });
+  let players = $state<PlayerInfo[]>([]);
+  let audioLevels = $state({ left: 0, right: 0 });
+  let artError = $state(false);
+  let artUrl = $state('');
+  let seeking = $state(false);
+  let seekPosition = $state(0);
+  let pollTimer: ReturnType<typeof setInterval>;
+  let cleanups: (() => void)[] = [];
+
+  // Derived
+  let isPlaying = $derived(media.status === 'Playing' || media.status === 'playing');
+  let progress = $derived(
+    media.duration_ms && media.duration_ms > 0
+      ? ((seeking ? seekPosition : (media.position_ms ?? 0)) / media.duration_ms) * 100
+      : 0
+  );
+  let elapsed = $derived(seeking ? seekPosition : (media.position_ms ?? 0));
+  let duration = $derived(media.duration_ms ?? 0);
+  let shuffleOn = $derived(media.shuffle === true);
+  let repeatMode = $derived(media.repeat ?? 'None');
+
+  function formatTime(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  async function fetchMedia() {
+    try {
+      const state = await api.get<MediaState>('/media');
+      media = state;
+      artError = false;
+      artUrl = `/api/media/art?t=${Date.now()}`;
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchPlayers() {
+    try {
+      players = await api.get<PlayerInfo[]>('/media/players');
+    } catch {
+      // ignore
+    }
+  }
+
+  async function transport(action: string) {
+    try {
+      await api.post(`/media/${action}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function toggleShuffle() {
+    try {
+      await api.post('/media/shuffle');
+    } catch {
+      // ignore
+    }
+  }
+
+  async function toggleRepeat() {
+    try {
+      await api.post('/media/repeat');
+    } catch {
+      // ignore
+    }
+  }
+
+  async function setVolume(vol: number) {
+    media.volume = vol;
+    try {
+      await api.post('/media/volume', { volume: vol });
+    } catch {
+      // ignore
+    }
+  }
+
+  async function seekTo(posMs: number) {
+    try {
+      await api.post('/media/seek', { position_ms: posMs });
+    } catch {
+      // ignore
+    }
+  }
+
+  async function selectPlayer(id: string) {
+    try {
+      await api.post('/media/player', { player_id: id });
+      await fetchMedia();
+    } catch {
+      // ignore
+    }
+  }
+
+  function handleProgressPointerDown(e: PointerEvent) {
+    if (!duration) return;
+    seeking = true;
+    updateSeekFromEvent(e);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleProgressPointerMove(e: PointerEvent) {
+    if (!seeking) return;
+    updateSeekFromEvent(e);
+  }
+
+  function handleProgressPointerUp(_e: PointerEvent) {
+    if (!seeking) return;
+    seeking = false;
+    seekTo(seekPosition);
+  }
+
+  function updateSeekFromEvent(e: PointerEvent) {
+    const bar = e.currentTarget as HTMLElement;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    seekPosition = ratio * duration;
+  }
+
+  function handleVolumeInput(e: Event) {
+    const value = parseFloat((e.target as HTMLInputElement).value);
+    setVolume(value);
+  }
+
+  onMount(() => {
+    fetchMedia();
+    fetchPlayers();
+
+    pollTimer = setInterval(fetchMedia, 5000);
+
+    cleanups.push(
+      api.on('media_changed', (msg) => {
+        if (msg.state) {
+          media = msg.state;
+          artError = false;
+          artUrl = `/api/media/art?t=${Date.now()}`;
+        }
+      }),
+      api.on('media_progress', (msg) => {
+        if (!seeking && msg.position_ms !== undefined) {
+          media.position_ms = msg.position_ms;
+        }
+      }),
+      api.on('audio_level', (msg) => {
+        audioLevels = { left: msg.left ?? 0, right: msg.right ?? 0 };
+      })
+    );
+  });
+
+  onDestroy(() => {
+    clearInterval(pollTimer);
+    cleanups.forEach((fn) => fn());
+  });
+</script>
+
+<div class="media-page">
+  <!-- Player selector -->
+  {#if players.length > 1}
+    <div class="player-selector">
+      {#each players as player}
+        <button
+          class="player-pill"
+          class:active={player.id === media.player_id}
+          onclick={() => selectPlayer(player.id)}
+        >
+          {player.name}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Cover art -->
+  <div class="art-container">
+    {#if artUrl && !artError}
+      <img
+        src={artUrl}
+        alt="Album art"
+        class="cover-art"
+        onerror={() => { artError = true; }}
+      />
+    {:else}
+      <div class="art-placeholder">
+        <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="40" cy="40" r="30" />
+          <circle cx="40" cy="40" r="8" />
+          <path d="M52 20 L52 44" stroke-width="3" />
+          <path d="M52 20 L62 24 L62 18 Z" fill="currentColor" stroke="none" />
+        </svg>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Track info -->
+  <div class="track-info">
+    <div class="track-title">{media.title || 'No media playing'}</div>
+    <div class="track-artist">{media.artist || ''}</div>
+    <div class="track-album">{media.album || ''}</div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress-section">
+    <div
+      class="progress-bar"
+      role="slider"
+      tabindex="0"
+      aria-label="Seek"
+      aria-valuemin={0}
+      aria-valuemax={duration}
+      aria-valuenow={elapsed}
+      onpointerdown={handleProgressPointerDown}
+      onpointermove={handleProgressPointerMove}
+      onpointerup={handleProgressPointerUp}
+    >
+      <div class="progress-track">
+        <div class="progress-fill" style="width: {progress}%"></div>
+        <div class="progress-thumb" style="left: {progress}%"></div>
+      </div>
+    </div>
+    <div class="time-labels">
+      <span>{formatTime(elapsed)}</span>
+      <span>{formatTime(duration)}</span>
+    </div>
+  </div>
+
+  <!-- Transport controls -->
+  <div class="transport">
+    <button class="transport-btn small" class:toggled={shuffleOn} onclick={toggleShuffle} aria-label="Shuffle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16,3 21,3 21,8" />
+        <line x1="4" y1="20" x2="21" y2="3" />
+        <polyline points="21,16 21,21 16,21" />
+        <line x1="15" y1="15" x2="21" y2="21" />
+        <line x1="4" y1="4" x2="9" y2="9" />
+      </svg>
+    </button>
+
+    <button class="transport-btn" onclick={() => transport('prev')} aria-label="Previous">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <path d="M6 6h2v12H6zM9.5 12l8.5 6V6z" />
+      </svg>
+    </button>
+
+    <button class="transport-btn play" onclick={() => transport(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
+      {#if isPlaying}
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <rect x="6" y="4" width="4" height="16" rx="1" />
+          <rect x="14" y="4" width="4" height="16" rx="1" />
+        </svg>
+      {:else}
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <polygon points="6,4 20,12 6,20" />
+        </svg>
+      {/if}
+    </button>
+
+    <button class="transport-btn" onclick={() => transport('next')} aria-label="Next">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
+      </svg>
+    </button>
+
+    <button class="transport-btn small" class:toggled={repeatMode !== 'None'} onclick={toggleRepeat} aria-label="Repeat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="17,1 21,5 17,9" />
+        <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+        <polyline points="7,23 3,19 7,15" />
+        <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+        {#if repeatMode === 'Track'}
+          <text x="12" y="15" text-anchor="middle" font-size="8" fill="currentColor" stroke="none">1</text>
+        {/if}
+      </svg>
+    </button>
+  </div>
+
+  <!-- Volume slider -->
+  <div class="volume-section">
+    <svg class="volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
+      {#if (media.volume ?? 0.5) > 0}
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      {/if}
+      {#if (media.volume ?? 0.5) > 0.5}
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+      {/if}
+    </svg>
+    <input
+      type="range"
+      class="volume-slider"
+      min="0"
+      max="1"
+      step="0.01"
+      value={media.volume ?? 0.5}
+      oninput={handleVolumeInput}
+      aria-label="Volume"
+    />
+  </div>
+
+  <!-- Audio level visualizer -->
+  <div class="vu-meter">
+    <div class="vu-channel">
+      <span class="vu-label">L</span>
+      <div class="vu-track">
+        <div class="vu-fill" style="width: {Math.min(100, audioLevels.left * 100)}%"></div>
+      </div>
+    </div>
+    <div class="vu-channel">
+      <span class="vu-label">R</span>
+      <div class="vu-track">
+        <div class="vu-fill" style="width: {Math.min(100, audioLevels.right * 100)}%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .media-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px;
+    overflow-y: auto;
+    gap: 12px;
+    touch-action: pan-y;
+  }
+
+  /* Player selector */
+  .player-selector {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 0;
+    flex-shrink: 0;
+  }
+
+  .player-pill {
+    padding: 6px 16px;
+    border-radius: 20px;
+    border: 1px solid #0f3460;
+    background: #16213e;
+    color: #888;
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .player-pill.active {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
+  }
+
+  /* Cover art */
+  .art-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    aspect-ratio: 1;
+    max-height: 40vh;
+    align-self: center;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .cover-art {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .art-placeholder {
+    width: 100%;
+    height: 100%;
+    background: #16213e;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+  }
+
+  .art-placeholder svg {
+    width: 80px;
+    height: 80px;
+  }
+
+  /* Track info */
+  .track-info {
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .track-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .track-artist {
+    font-size: 15px;
+    color: #94a3b8;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .track-album {
+    font-size: 13px;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Progress bar */
+  .progress-section {
+    flex-shrink: 0;
+    padding: 0 4px;
+  }
+
+  .progress-bar {
+    position: relative;
+    padding: 10px 0;
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .progress-track {
+    height: 4px;
+    background: #16213e;
+    border-radius: 2px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #7c3aed;
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+
+  .progress-thumb {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    background: #7c3aed;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.4);
+    transition: left 0.1s linear;
+  }
+
+  .time-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+
+  /* Transport controls */
+  .transport {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-shrink: 0;
+    padding: 4px 0;
+  }
+
+  .transport-btn {
+    width: 48px;
+    height: 48px;
+    border: none;
+    background: transparent;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.15s;
+  }
+
+  .transport-btn:active {
+    transform: scale(0.9);
+    background: rgba(124, 58, 237, 0.15);
+  }
+
+  .transport-btn svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .transport-btn.small {
+    width: 40px;
+    height: 40px;
+  }
+
+  .transport-btn.small svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .transport-btn.play {
+    width: 64px;
+    height: 64px;
+    background: #7c3aed;
+    border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+  }
+
+  .transport-btn.play:active {
+    background: #6d28d9;
+    transform: scale(0.95);
+  }
+
+  .transport-btn.play svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .transport-btn.toggled {
+    color: #7c3aed;
+  }
+
+  /* Volume */
+  .volume-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    padding: 0 4px;
+  }
+
+  .volume-icon {
+    width: 22px;
+    height: 22px;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  .volume-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: #16213e;
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #7c3aed;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+  }
+
+  .volume-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #7c3aed;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+  }
+
+  /* VU meter */
+  .vu-meter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 0 4px;
+  }
+
+  .vu-channel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .vu-label {
+    font-size: 11px;
+    color: #64748b;
+    width: 12px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .vu-track {
+    flex: 1;
+    height: 6px;
+    background: #16213e;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .vu-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #22c55e 0%, #22c55e 60%, #eab308 75%, #ef4444 100%);
+    transition: width 0.08s linear;
+  }
+</style>
