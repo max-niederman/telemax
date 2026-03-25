@@ -75,7 +75,7 @@ fn config_path() -> PathBuf {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
             PathBuf::from(home).join(".config")
         });
-    config_dir.join("niri-remote").join("settings.json")
+    config_dir.join("telemax").join("settings.json")
 }
 
 pub fn load() -> Settings {

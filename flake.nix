@@ -1,5 +1,5 @@
 {
-  description = "niri-remote — remote control daemon for Niri Wayland compositor";
+  description = "telemax — remote control daemon for Niri Wayland compositor";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -12,10 +12,12 @@
         pkgs = nixpkgs.legacyPackages.${system};
 
         web = pkgs.buildNpmPackage {
-          pname = "niri-remote-web";
+          pname = "telemax-web";
           version = "0.1.0";
           src = ./web;
           npmDepsHash = "sha256-8+iZKGIQgl+IAYvfC4P75SdUH+qXq4YenepMiRzrNM4=";
+
+          env.TELEMAX_BASE_PATH = "/telemax";
 
           buildPhase = ''
             npm run build
@@ -27,7 +29,7 @@
         };
 
         server = pkgs.rustPlatform.buildRustPackage {
-          pname = "niri-remote-server";
+          pname = "telemax-server";
           version = "0.1.0";
           src = ./server;
           cargoHash = "sha256-J4rSnXp2fqWuj7A+G3vkzuYKMwfad+5YOdnrcjs2sEA=";

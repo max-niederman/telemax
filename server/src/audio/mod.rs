@@ -38,7 +38,7 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
     ));
 
     let context = Rc::new(RefCell::new(
-        Context::new(mainloop.borrow().deref(), "niri-remote-audio")
+        Context::new(mainloop.borrow().deref(), "telemax-audio")
             .ok_or("Failed to create PulseAudio context")?,
     ));
 
@@ -156,7 +156,7 @@ fn run_pa_monitor(tx: broadcast::Sender<AudioLevel>) -> Result<(), String> {
     }
 
     let stream = Rc::new(RefCell::new(
-        Stream::new(&mut context.borrow_mut(), "niri-remote-peak", &spec, None)
+        Stream::new(&mut context.borrow_mut(), "telemax-peak", &spec, None)
             .ok_or("Failed to create PulseAudio stream")?,
     ));
 

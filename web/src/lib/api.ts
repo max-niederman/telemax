@@ -1,3 +1,5 @@
+import { base } from '$app/paths';
+
 const WS_RECONNECT_BASE = 1000;
 const WS_RECONNECT_MAX = 30000;
 
@@ -12,13 +14,13 @@ export class ApiClient {
   get connected() { return this._connected; }
 
   async get<T>(path: string): Promise<T> {
-    const res = await fetch(`/api${path}`);
+    const res = await fetch(`${base}/api${path}`);
     if (!res.ok) throw await res.json();
     return res.json();
   }
 
   async post<T = void>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`/api${path}`, {
+    const res = await fetch(`${base}/api${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -29,7 +31,7 @@ export class ApiClient {
   }
 
   async put<T = void>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`/api${path}`, {
+    const res = await fetch(`${base}/api${path}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -41,7 +43,7 @@ export class ApiClient {
 
   connectWs() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${proto}//${location.host}/api/ws`);
+    this.ws = new WebSocket(`${proto}//${location.host}${base}/api/ws`);
     this.ws.onopen = () => { this._connected = true; this.reconnectDelay = WS_RECONNECT_BASE; };
     this.ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);

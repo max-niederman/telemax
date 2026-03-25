@@ -69,7 +69,7 @@ impl VirtualInput {
             version: 1,
         };
 
-        handle.create(&id, b"niri-remote-mouse", 0, &[])?;
+        handle.create(&id, b"telemax-mouse", 0, &[])?;
 
         Ok(handle)
     }
@@ -95,7 +95,7 @@ impl VirtualInput {
             version: 1,
         };
 
-        handle.create(&id, b"niri-remote-keyboard", 0, &[])?;
+        handle.create(&id, b"telemax-keyboard", 0, &[])?;
 
         Ok(handle)
     }

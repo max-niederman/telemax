@@ -477,13 +477,13 @@ async fn main() {
         )
         .init();
 
-    let port: u16 = std::env::var("NIRI_REMOTE_PORT")
+    let port: u16 = std::env::var("TELEMAX_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(9876);
 
     let web_dir =
-        std::env::var("NIRI_REMOTE_WEB_DIR").unwrap_or_else(|_| "./web/build".into());
+        std::env::var("TELEMAX_WEB_DIR").unwrap_or_else(|_| "./web/build".into());
 
     // Load settings
     let settings = settings::load();

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
+  import { base } from '$app/paths';
   import type { MediaState, PlayerInfo } from '$lib/types';
 
   let media = $state<MediaState>({
@@ -39,7 +40,7 @@
       const state = await api.get<MediaState>('/media');
       media = state;
       artError = false;
-      artUrl = `/api/media/art?t=${Date.now()}`;
+      artUrl = `${base}/api/media/art?t=${Date.now()}`;
     } catch {
       // ignore
     }
@@ -144,7 +145,7 @@
         if (msg.state) {
           media = msg.state;
           artError = false;
-          artUrl = `/api/media/art?t=${Date.now()}`;
+          artUrl = `${base}/api/media/art?t=${Date.now()}`;
         }
       }),
       api.on('media_progress', (msg) => {
