@@ -98,7 +98,7 @@
 
   async function selectPlayer(id: string) {
     try {
-      await api.post('/media/player', { player_id: id });
+      await api.post('/media/player', { id });
       await fetchMedia();
     } catch {
       // ignore

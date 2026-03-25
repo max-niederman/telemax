@@ -131,8 +131,8 @@
     keyboardOpen = !keyboardOpen;
     if (keyboardOpen) {
       // Focus hidden input on next tick to bring up mobile keyboard
-      requestAnimationFrame(() => {
-        hiddenInput?.focus();
+      setTimeout(() => {
+        hiddenInput?.focus({ preventScroll: true });
       });
     } else {
       hiddenInput?.blur();
@@ -331,7 +331,7 @@
   .touch-hint {
     text-align: center;
     color: #333;
-    pointer-events: none;
+    pointer-events: auto;
   }
 
   .touch-hint p {
@@ -413,6 +413,6 @@
     width: 1px;
     height: 1px;
     opacity: 0;
-    pointer-events: none;
+    pointer-events: auto;
   }
 </style>
