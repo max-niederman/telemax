@@ -270,6 +270,7 @@
 
   <!-- Transport controls -->
   <div class="transport">
+    {#if media.shuffle != null}
     <button class="transport-btn small" class:toggled={shuffleOn} onclick={toggleShuffle} aria-label="Shuffle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="16,3 21,3 21,8" />
@@ -279,6 +280,7 @@
         <line x1="4" y1="4" x2="9" y2="9" />
       </svg>
     </button>
+    {/if}
 
     <button class="transport-btn" onclick={() => transport('prev')} aria-label="Previous">
       <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -321,6 +323,7 @@
       </svg>
     </button>
 
+    {#if media.repeat != null}
     <button class="transport-btn small" class:toggled={repeatMode !== 'None'} onclick={toggleRepeat} aria-label="Repeat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="17,1 21,5 17,9" />
@@ -332,6 +335,7 @@
         {/if}
       </svg>
     </button>
+    {/if}
   </div>
 
   <!-- Volume slider -->
