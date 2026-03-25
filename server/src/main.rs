@@ -523,8 +523,11 @@ async fn main() {
         audio_tx,
     };
 
-    // Build router
-    let api = Router::new()
+    let base_path =
+        std::env::var("TELEMAX_BASE_PATH").unwrap_or_default();
+
+    // Build inner router with API routes + static file fallback
+    let inner = Router::new()
         // Status
         .route("/api/status", get(status))
         // Settings
@@ -559,9 +562,17 @@ async fn main() {
         // Auth middleware on all API routes
         .layer(middleware::from_fn(auth::require_tailscale_auth))
         // Shared state
-        .with_state(app_state);
+        .with_state(app_state)
+        // Static files fallback
+        .fallback_service(ServeDir::new(&web_dir));
 
-    let app = api.fallback_service(ServeDir::new(&web_dir));
+    // Nest under base path if configured (e.g., /telemax for Tailscale Serve)
+    let app = if base_path.is_empty() {
+        inner
+    } else {
+        tracing::info!("serving under base path: {base_path}");
+        Router::new().nest(&base_path, inner)
+    };
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     tracing::info!("listening on {}", addr);
