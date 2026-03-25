@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { page } from '$app/stores';
+  import { base } from '$app/paths';
 
   let { children } = $props();
 
@@ -10,14 +11,20 @@
   });
 
   const tabs = [
-    { href: '/', label: 'Trackpad', icon: 'trackpad' },
-    { href: '/media', label: 'Media', icon: 'media' },
-    { href: '/windows', label: 'Windows', icon: 'windows' },
-    { href: '/settings', label: 'Settings', icon: 'settings' },
+    { path: '/', label: 'Trackpad', icon: 'trackpad' },
+    { path: '/media', label: 'Media', icon: 'media' },
+    { path: '/windows', label: 'Windows', icon: 'windows' },
+    { path: '/settings', label: 'Settings', icon: 'settings' },
   ] as const;
 
   let currentPath = $derived($page.url.pathname);
   let connected = $derived(api.connected);
+
+  function isActive(tabPath: string): boolean {
+    const full = base + tabPath;
+    if (tabPath === '/') return currentPath === full || currentPath === base || currentPath === base + '/';
+    return currentPath.startsWith(full);
+  }
 </script>
 
 <div class="app">
@@ -28,9 +35,9 @@
   <nav class="tab-bar">
     {#each tabs as tab}
       <a
-        href={tab.href}
+        href="{base}{tab.path}"
         class="tab"
-        class:active={tab.href === '/' ? currentPath === '/' : currentPath.startsWith(tab.href)}
+        class:active={isActive(tab.path)}
       >
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           {#if tab.icon === 'trackpad'}
