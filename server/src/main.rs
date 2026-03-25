@@ -563,10 +563,11 @@ async fn main() {
         .layer(middleware::from_fn(auth::require_tailscale_auth))
         // Shared state
         .with_state(app_state)
+        // Serve index.html at the root
+        .route_service("/", ServeFile::new(format!("{web_dir}/index.html")))
         // Static files fallback with SPA fallback to index.html
         .fallback_service(
             ServeDir::new(&web_dir)
-                .append_index_html_on_directories(true)
                 .not_found_service(ServeFile::new(format!("{web_dir}/index.html"))),
         );
 
