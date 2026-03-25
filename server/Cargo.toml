@@ -13,3 +13,5 @@ tracing = "0.1"
 input-linux = "0.7"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 niri-ipc = "25.11"
+zbus = "5"
+libpulse-binding = "2"

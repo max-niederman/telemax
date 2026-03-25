@@ -1,6 +1,8 @@
+mod audio;
 mod auth;
 mod error;
 mod input;
+mod media;
 mod niri;
 mod settings;
 
