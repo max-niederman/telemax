@@ -1,4 +1,8 @@
-use axum::{Json, Router, routing::get};
+mod auth;
+mod error;
+mod settings;
+
+use axum::{Json, Router, middleware, routing::get};
 use serde::Serialize;
 use std::net::SocketAddr;
 use tower_http::services::ServeDir;
@@ -32,9 +36,11 @@ async fn main() {
 
     let web_dir = std::env::var("NIRI_REMOTE_WEB_DIR").unwrap_or_else(|_| "./web/build".into());
 
-    let app = Router::new()
+    let api = Router::new()
         .route("/api/status", get(status))
-        .fallback_service(ServeDir::new(&web_dir));
+        .layer(middleware::from_fn(auth::require_tailscale_auth));
+
+    let app = api.fallback_service(ServeDir::new(&web_dir));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     tracing::info!("listening on {}", addr);
