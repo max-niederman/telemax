@@ -37,7 +37,6 @@ const ALLOWED_ACTIONS: &[&str] = &[
     "maximize-column",
     "toggle-window-floating",
     "switch-preset-column-width",
-    "spawn",
 ];
 
 /// Read the niri IPC socket path from the `NIRI_SOCKET` environment variable.

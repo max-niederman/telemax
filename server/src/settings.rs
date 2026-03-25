@@ -17,22 +17,11 @@ impl Default for Theme {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppShortcut {
-    pub id: String,
-    pub name: String,
-    pub command: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_sensitivity")]
     pub trackpad_sensitivity: f64,
     #[serde(default)]
     pub theme: Theme,
-    #[serde(default)]
-    pub app_shortcuts: Vec<AppShortcut>,
     #[serde(default = "default_visible_actions")]
     pub visible_actions: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,7 +48,6 @@ impl Default for Settings {
         Self {
             trackpad_sensitivity: default_sensitivity(),
             theme: Theme::default(),
-            app_shortcuts: Vec::new(),
             visible_actions: default_visible_actions(),
             audio_device: None,
         }

@@ -283,7 +283,7 @@
     </button>
 
     <button class="transport-text play" onclick={() => transport(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
-      {#if isPlaying}&#x275A;&#x275A;{:else}&#x25B6;{/if}
+      {#if isPlaying}<span class="pause-icon"></span>{:else}<span class="play-icon"></span>{/if}
     </button>
 
     <button class="transport-text skip" onclick={() => skip(15)} aria-label="Forward 15s">
@@ -513,9 +513,27 @@
   }
 
   .transport-text.play {
-    font-size: 36px;
-    padding: 12px 16px;
-    line-height: 1;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .play-icon {
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 14px 0 14px 22px;
+    border-color: transparent transparent transparent #ffffff;
+    display: block;
+  }
+
+  .pause-icon {
+    width: 22px;
+    height: 28px;
+    border-left: 6px solid #ffffff;
+    border-right: 6px solid #ffffff;
+    display: block;
   }
 
   .transport-text.skip {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api.svelte';
-  import type { Settings, AppShortcut } from '$lib/types';
+  import type { Settings } from '$lib/types';
 
   interface NiriWindow {
     id: number;
@@ -39,7 +39,6 @@
   let windows = $state<NiriWindow[]>([]);
   let workspaces = $state<NiriWorkspace[]>([]);
   let settings = $state<Settings | null>(null);
-  let apps = $state<AppShortcut[]>([]);
   let swipedWindowId = $state<number | null>(null);
   let cleanups: (() => void)[] = [];
 
@@ -65,16 +64,14 @@
 
   async function fetchAll() {
     try {
-      const [w, ws, s, a] = await Promise.all([
+      const [w, ws, s] = await Promise.all([
         api.get<NiriWindow[]>('/niri/windows'),
         api.get<NiriWorkspace[]>('/niri/workspaces'),
         api.get<Settings>('/settings'),
-        api.get<AppShortcut[]>('/apps'),
       ]);
       windows = w;
       workspaces = ws;
       settings = s;
-      apps = a;
     } catch {
       // ignore
     }
@@ -109,14 +106,6 @@
   async function runAction(action: string) {
     try {
       await api.post('/niri/action', { action });
-    } catch {
-      // ignore
-    }
-  }
-
-  async function launchApp(shortcut: AppShortcut) {
-    try {
-      await api.post('/apps/launch', { id: shortcut.id });
     } catch {
       // ignore
     }
@@ -221,19 +210,6 @@
     </section>
   {/if}
 
-  <!-- App launcher -->
-  {#if apps.length > 0}
-    <section class="apps-section">
-      <div class="section-label">APPS</div>
-      <div class="app-grid">
-        {#each apps as app}
-          <button class="app-btn" onclick={() => launchApp(app)}>
-            {app.name.toUpperCase()}
-          </button>
-        {/each}
-      </div>
-    </section>
-  {/if}
 </div>
 
 <style>
@@ -438,39 +414,4 @@
     color: #ff2d2d;
   }
 
-  /* App launcher */
-  .apps-section {
-    flex-shrink: 0;
-    padding-bottom: 16px;
-  }
-
-  .app-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0;
-    padding: 0 16px;
-  }
-
-  .app-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px 8px;
-    background: transparent;
-    border: 1px solid #333333;
-    color: #ffffff;
-    cursor: pointer;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    text-align: center;
-    min-height: 48px;
-    margin-top: -1px;
-    margin-left: -1px;
-  }
-
-  .app-btn:active {
-    color: #ff2d2d;
-  }
 </style>

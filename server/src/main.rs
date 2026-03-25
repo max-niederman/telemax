@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast};
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::auth::{PairRequest, PairResponse, PairingState};
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
@@ -347,18 +348,6 @@ fn parse_niri_action(name: &str, args: &serde_json::Value) -> Result<niri_ipc::A
             Ok(niri_ipc::Action::ToggleWindowFloating { id })
         }
         "switch-preset-column-width" => Ok(niri_ipc::Action::SwitchPresetColumnWidth {}),
-        "spawn" => {
-            let command = args
-                .get("command")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect::<Vec<_>>()
-                })
-                .ok_or("spawn requires args.command (array of strings)")?;
-            Ok(niri_ipc::Action::Spawn { command })
-        }
         other => Err(format!("Unknown action: {other}")),
     }
 }
@@ -412,56 +401,54 @@ async fn get_niri_outputs() -> ApiResult<Json<serde_json::Value>> {
 }
 
 // ---------------------------------------------------------------------------
-// Apps
+// Pairing
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
-struct AppEntry {
-    id: String,
-    name: String,
-    icon: Option<String>,
+async fn post_pair(
+    State(pairing): State<Arc<PairingState>>,
+    Json(body): Json<PairRequest>,
+) -> impl IntoResponse {
+    match pairing.pair(&body.code).await {
+        Some(token) => {
+            let cookie = format!(
+                "telemax_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000"
+            );
+            (
+                StatusCode::OK,
+                [("set-cookie", cookie)],
+                Json(PairResponse { token }),
+            )
+                .into_response()
+        }
+        None => {
+            #[derive(Serialize)]
+            struct PairError {
+                error: PairErrorDetail,
+            }
+            #[derive(Serialize)]
+            struct PairErrorDetail {
+                code: &'static str,
+                message: &'static str,
+            }
+            (
+                StatusCode::FORBIDDEN,
+                Json(PairError {
+                    error: PairErrorDetail {
+                        code: "INVALID_CODE",
+                        message: "Invalid pairing code",
+                    },
+                }),
+            )
+                .into_response()
+        }
+    }
 }
 
-async fn get_apps(State(state): State<AppState>) -> Json<Vec<AppEntry>> {
-    let s = state.settings.read().await;
-    let apps: Vec<AppEntry> = s
-        .app_shortcuts
-        .iter()
-        .map(|shortcut| AppEntry {
-            id: shortcut.id.clone(),
-            name: shortcut.name.clone(),
-            icon: shortcut.icon.clone(),
-        })
-        .collect();
-    Json(apps)
-}
-
-#[derive(Deserialize)]
-struct LaunchApp {
-    id: String,
-}
-
-async fn post_apps_launch(
+async fn post_pair_refresh(
     State(state): State<AppState>,
-    Json(body): Json<LaunchApp>,
-) -> ApiResult<StatusCode> {
-    let s = state.settings.read().await;
-    let shortcut = s
-        .app_shortcuts
-        .iter()
-        .find(|sc| sc.id == body.id)
-        .ok_or_else(|| ApiError::not_found(format!("Unknown app shortcut: {}", body.id)))?;
-
-    let command = shortcut.command.clone();
-    drop(s);
-
-    let action = niri_ipc::Action::Spawn { command };
-    tokio::task::spawn_blocking(move || niri::perform_action(action))
-        .await
-        .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", format!("Task join error: {e}")))?
-        .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", e))?;
-
-    Ok(StatusCode::NO_CONTENT)
+) -> StatusCode {
+    state.pairing.refresh_code().await;
+    StatusCode::NO_CONTENT
 }
 
 // ---------------------------------------------------------------------------
@@ -515,16 +502,20 @@ async fn main() {
     let (audio_tx, _audio_rx) = broadcast::channel::<audio::AudioLevel>(64);
     audio::start_monitoring(audio_tx.clone());
 
+    // Create pairing state
+    let pairing = PairingState::new();
+
     // Build AppState
     let app_state = AppState {
         settings: shared_settings,
         input: virtual_input,
         media,
         audio_tx,
+        pairing: pairing.clone(),
     };
 
-    // Build router with API routes + static file fallback
-    let app = Router::new()
+    // Authenticated API routes
+    let authed_api = Router::new()
         // Status
         .route("/api/status", get(status))
         // Settings
@@ -551,15 +542,26 @@ async fn main() {
         .route("/api/niri/windows", get(get_niri_windows))
         .route("/api/niri/workspaces", get(get_niri_workspaces))
         .route("/api/niri/outputs", get(get_niri_outputs))
-        // Apps
-        .route("/api/apps", get(get_apps))
-        .route("/api/apps/launch", post(post_apps_launch))
+        // Pair refresh (authenticated — lets paired clients pair another device)
+        .route("/api/pair/refresh", post(post_pair_refresh))
         // WebSocket
         .route("/api/ws", get(ws::ws_handler))
-        // Auth middleware on all API routes
-        .layer(middleware::from_fn(auth::require_tailscale_auth))
-        // Shared state
-        .with_state(app_state)
+        // Auth middleware on all routes in this group
+        .layer(middleware::from_fn_with_state(
+            pairing.clone(),
+            auth::require_auth,
+        ))
+        .with_state(app_state);
+
+    // Public routes (no auth)
+    let public_api = Router::new()
+        .route("/api/pair", post(post_pair))
+        .with_state(pairing);
+
+    // Combine everything
+    let app = Router::new()
+        .merge(authed_api)
+        .merge(public_api)
         // Serve index.html at the root
         .route_service("/", ServeFile::new(format!("{web_dir}/index.html")))
         // Static files fallback with SPA fallback to index.html

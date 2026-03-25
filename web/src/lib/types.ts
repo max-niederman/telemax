@@ -20,14 +20,6 @@ export interface PlayerInfo {
 export interface Settings {
   trackpad_sensitivity: number;
   theme: string;
-  app_shortcuts: AppShortcut[];
   visible_actions: string[];
   audio_device?: string;
-}
-
-export interface AppShortcut {
-  id: string;
-  name: string;
-  command: string[];
-  icon?: string;
 }

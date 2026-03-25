@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api.svelte';
-  import type { Settings, AppShortcut } from '$lib/types';
+  import type { Settings } from '$lib/types';
 
   const ALL_NIRI_ACTIONS = [
     { name: 'close-window', label: 'Close Window' },
@@ -30,23 +30,12 @@
   let settings = $state<Settings>({
     trackpad_sensitivity: 1.0,
     theme: 'dark',
-    app_shortcuts: [],
     visible_actions: [],
   });
   let status = $state<StatusInfo>({});
   let saving = $state(false);
   let saveMessage = $state('');
   let dirty = $state(false);
-
-  // Inline form for adding app shortcuts
-  let addingApp = $state(false);
-  let newAppName = $state('');
-  let newAppCommand = $state('');
-
-  // Editing app shortcuts
-  let editingAppId = $state<string | null>(null);
-  let editAppName = $state('');
-  let editAppCommand = $state('');
 
   async function fetchSettings() {
     try {
@@ -101,46 +90,6 @@
       settings.visible_actions = [...settings.visible_actions, name];
     }
     markDirty();
-  }
-
-  function addAppShortcut() {
-    if (!newAppName.trim() || !newAppCommand.trim()) return;
-    const shortcut: AppShortcut = {
-      id: crypto.randomUUID(),
-      name: newAppName.trim(),
-      command: newAppCommand.trim().split(/\s+/),
-    };
-    settings.app_shortcuts = [...settings.app_shortcuts, shortcut];
-    newAppName = '';
-    newAppCommand = '';
-    addingApp = false;
-    markDirty();
-  }
-
-  function removeAppShortcut(id: string) {
-    settings.app_shortcuts = settings.app_shortcuts.filter((a) => a.id !== id);
-    markDirty();
-  }
-
-  function startEditApp(app: AppShortcut) {
-    editingAppId = app.id;
-    editAppName = app.name;
-    editAppCommand = app.command.join(' ');
-  }
-
-  function saveEditApp() {
-    if (!editingAppId || !editAppName.trim() || !editAppCommand.trim()) return;
-    settings.app_shortcuts = settings.app_shortcuts.map((a) =>
-      a.id === editingAppId
-        ? { ...a, name: editAppName.trim(), command: editAppCommand.trim().split(/\s+/) }
-        : a
-    );
-    editingAppId = null;
-    markDirty();
-  }
-
-  function cancelEditApp() {
-    editingAppId = null;
   }
 
   function handleAudioDevice(e: Event) {
@@ -234,71 +183,6 @@
           <span class="checkbox-label">{action.label.toUpperCase()}</span>
         </label>
       {/each}
-    </div>
-  </section>
-
-  <!-- App shortcuts editor -->
-  <section class="setting-section">
-    <div class="section-header">APP SHORTCUTS</div>
-    <div class="setting-group">
-      {#each settings.app_shortcuts as app}
-        <div class="app-row">
-          {#if editingAppId === app.id}
-            <div class="app-edit-form">
-              <input
-                class="text-input"
-                type="text"
-                bind:value={editAppName}
-                placeholder="Name"
-              />
-              <input
-                class="text-input"
-                type="text"
-                bind:value={editAppCommand}
-                placeholder="Command"
-              />
-              <div class="app-edit-actions">
-                <button class="btn-sm save" onclick={saveEditApp}>SAVE</button>
-                <button class="btn-sm" onclick={cancelEditApp}>CANCEL</button>
-              </div>
-            </div>
-          {:else}
-            <div class="app-info">
-              <span class="app-row-name">{app.name}</span>
-              <span class="app-row-cmd">{app.command.join(' ')}</span>
-            </div>
-            <div class="app-actions">
-              <button class="text-btn" onclick={() => startEditApp(app)} aria-label="Edit">EDIT</button>
-              <button class="text-btn danger" onclick={() => removeAppShortcut(app.id)} aria-label="Delete">DEL</button>
-            </div>
-          {/if}
-        </div>
-      {/each}
-
-      {#if addingApp}
-        <div class="app-add-form">
-          <input
-            class="text-input"
-            type="text"
-            bind:value={newAppName}
-            placeholder="App name"
-          />
-          <input
-            class="text-input"
-            type="text"
-            bind:value={newAppCommand}
-            placeholder="Command (e.g. firefox)"
-          />
-          <div class="app-edit-actions">
-            <button class="btn-sm save" onclick={addAppShortcut}>ADD</button>
-            <button class="btn-sm" onclick={() => { addingApp = false; }}>CANCEL</button>
-          </div>
-        </div>
-      {:else}
-        <button class="add-btn" onclick={() => { addingApp = true; }}>
-          + ADD SHORTCUT
-        </button>
-      {/if}
     </div>
   </section>
 
@@ -513,83 +397,6 @@
     color: #ffffff;
   }
 
-  /* App shortcuts */
-  .app-row {
-    padding: 10px 0;
-    border-bottom: 1px solid #1a1a1a;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .app-row:last-of-type {
-    border-bottom: none;
-  }
-
-  .app-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .app-row-name {
-    display: block;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    color: #ffffff;
-  }
-
-  .app-row-cmd {
-    display: block;
-    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
-    font-size: 12px;
-    color: #666666;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .app-actions {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .text-btn {
-    background: transparent;
-    border: none;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: #666666;
-    cursor: pointer;
-    padding: 8px 4px;
-  }
-
-  .text-btn:active {
-    color: #ff2d2d;
-  }
-
-  .text-btn.danger:active {
-    color: #ff2d2d;
-  }
-
-  .app-edit-form,
-  .app-add-form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px 0;
-    width: 100%;
-  }
-
-  .app-edit-actions {
-    display: flex;
-    gap: 8px;
-  }
-
   .text-input {
     width: 100%;
     padding: 10px 0;
@@ -610,49 +417,6 @@
 
   .text-input::placeholder {
     color: #333333;
-  }
-
-  .btn-sm {
-    padding: 10px 16px;
-    border: 1px solid #333333;
-    background: transparent;
-    color: #666666;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-  }
-
-  .btn-sm.save {
-    border-color: #ff2d2d;
-    color: #ff2d2d;
-  }
-
-  .btn-sm:active {
-    color: #ffffff;
-  }
-
-  .add-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    padding: 14px;
-    background: transparent;
-    border: 1px solid #333333;
-    color: #666666;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-    margin-top: 8px;
-  }
-
-  .add-btn:active {
-    color: #ff2d2d;
-    border-color: #ff2d2d;
   }
 
   /* Save button */
