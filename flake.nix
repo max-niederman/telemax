@@ -42,7 +42,7 @@
           pname = "telemax-host";
           version = "0.1.0";
           src = ./host;
-          cargoHash = pkgs.lib.fakeHash;
+          cargoHash = "sha256-JQ/AMBaUtJ+JvvWgbPMun7oDzs2MMDS+/4Vi6L6r9VQ=";
         };
 
         # Native messaging manifest for the browser extension
