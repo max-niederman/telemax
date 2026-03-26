@@ -46,22 +46,32 @@ impl MediaController {
 
         let mut players = Vec::new();
 
-        // Check if the KDE browser integration host is running (provides richer
-        // MPRIS data than Firefox/Zen's built-in MPRIS). If so, skip the
-        // browser's built-in entries which have ".instance_" in the name.
-        let has_browser_integration = names.iter().any(|n| {
+        // Check if the KDE browser integration host is actively playing.
+        // Only filter browser built-in MPRIS if the integration host has actual data.
+        let integration_host = names.iter().find(|n| {
             let s = n.as_str();
             s == "org.mpris.MediaPlayer2.telemax"
                 || s == "org.mpris.MediaPlayer2.plasma-browser-integration"
-        });
+        }).map(|n| n.as_str().to_string());
+
+        let integration_active = if let Some(ref host_name) = integration_host {
+            // Check if the host is actually playing (not just registered with no data)
+            self.is_player_active(host_name).await
+        } else {
+            false
+        };
 
         for name in names {
             let name_str = name.as_str();
             if !name_str.starts_with("org.mpris.MediaPlayer2.") {
                 continue;
             }
-            // Drop browser built-in MPRIS when the integration host is active
-            if has_browser_integration && name_str.contains(".instance_") {
+            // Drop browser built-in MPRIS only when integration host has active media
+            if integration_active && name_str.contains(".instance_") {
+                continue;
+            }
+            // Skip the integration host itself if it has no data
+            if !integration_active && integration_host.as_deref() == Some(name_str) {
                 continue;
             }
             let display_name = self.get_player_display_name(name_str).await;
@@ -72,6 +82,32 @@ impl MediaController {
         }
 
         Ok(players)
+    }
+
+    /// Check if a player has actual media data (not just "Stopped" with empty metadata).
+    async fn is_player_active(&self, bus_name: &str) -> bool {
+        let proxy = match (|| -> Result<_, zbus::Error> {
+            let b = zbus::proxy::Builder::<'_, zbus::Proxy>::new(&self.connection)
+                .destination(bus_name)?
+                .path("/org/mpris/MediaPlayer2")?
+                .interface("org.mpris.MediaPlayer2.Player")?;
+            Ok(b)
+        })() {
+            Ok(b) => match b.build().await {
+                Ok(p) => p,
+                Err(_) => return false,
+            },
+            Err(_) => return false,
+        };
+
+        // Check PlaybackStatus — "Stopped" with no title = inactive
+        let status: String = proxy.get_property("PlaybackStatus").await.unwrap_or_default();
+        if status == "Playing" || status == "Paused" {
+            return true;
+        }
+        // Even if stopped, check if there's metadata
+        let meta: HashMap<String, Value> = proxy.get_property("Metadata").await.unwrap_or_default();
+        meta.contains_key("xesam:title")
     }
 
     /// Build a display name from the player's current media title or identity.
