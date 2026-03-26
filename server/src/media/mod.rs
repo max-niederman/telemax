@@ -48,18 +48,73 @@ impl MediaController {
         for name in names {
             let name_str = name.as_str();
             if name_str.starts_with("org.mpris.MediaPlayer2.") {
-                let short_name = name_str
-                    .strip_prefix("org.mpris.MediaPlayer2.")
-                    .unwrap_or(name_str)
-                    .to_string();
+                let display_name = self.get_player_display_name(name_str).await;
                 players.push(PlayerInfo {
                     id: name_str.to_string(),
-                    name: short_name,
+                    name: display_name,
                 });
             }
         }
 
         Ok(players)
+    }
+
+    /// Build a display name from the player's current media title or identity.
+    /// Prefers "Title — App" (e.g., "House | Disney+ — Zen") when media is playing,
+    /// falls back to Identity (e.g., "Spotify"), then the bus name suffix.
+    async fn get_player_display_name(&self, bus_name: &str) -> String {
+        let fallback = bus_name
+            .strip_prefix("org.mpris.MediaPlayer2.")
+            .unwrap_or(bus_name)
+            .to_string();
+
+        let builder = (|| -> Result<_, zbus::Error> {
+            let b = zbus::proxy::Builder::<'_, zbus::Proxy>::new(&self.connection)
+                .destination(bus_name)?
+                .path("/org/mpris/MediaPlayer2")?
+                .interface("org.mpris.MediaPlayer2.Player")?;
+            Ok(b)
+        })();
+        let proxy = match builder {
+            Ok(b) => match b.build().await {
+                Ok(p) => p,
+                Err(_) => return fallback,
+            },
+            Err(_) => return fallback,
+        };
+
+        // Try to get the current media title
+        let title: Option<String> = proxy
+            .get_property::<HashMap<String, Value>>("Metadata")
+            .await
+            .ok()
+            .and_then(|meta| extract_string(&meta, "xesam:title"))
+            .filter(|t| !t.is_empty());
+
+        // Get app identity from the root interface
+        let identity: Option<String> = {
+            let root_proxy = (|| -> Result<_, zbus::Error> {
+                let b = zbus::proxy::Builder::<'_, zbus::Proxy>::new(&self.connection)
+                    .destination(bus_name)?
+                    .path("/org/mpris/MediaPlayer2")?
+                    .interface("org.mpris.MediaPlayer2")?;
+                Ok(b)
+            })();
+            match root_proxy {
+                Ok(b) => match b.build().await {
+                    Ok(p) => p.get_property::<String>("Identity").await.ok(),
+                    Err(_) => None,
+                },
+                Err(_) => None,
+            }
+        };
+
+        match (title, identity) {
+            (Some(t), Some(id)) => format!("{t} — {id}"),
+            (Some(t), None) => t,
+            (None, Some(id)) => id,
+            (None, None) => fallback,
+        }
     }
 
     pub async fn select_player(&self, id: &str) {
