@@ -8,68 +8,113 @@
     app_id?: string;
     workspace_id?: number;
     is_focused?: boolean;
+    layout?: {
+      pos_in_scrolling_layout?: [number, number];
+      tile_size?: [number, number];
+      window_size?: [number, number];
+    };
   }
 
   interface NiriWorkspace {
     id: number;
     idx: number;
     name?: string;
-    is_active?: boolean;
     output?: string;
+    is_active?: boolean;
+    is_focused?: boolean;
+    active_window_id?: number | null;
   }
 
-  const ALL_ACTIONS: { name: string; label: string }[] = [
-    { name: 'screenshot', label: 'Screenshot' },
-    { name: 'fullscreen-window', label: 'Fullscreen' },
-    { name: 'maximize-column', label: 'Maximize' },
-    { name: 'toggle-window-floating', label: 'Float' },
-    { name: 'power-off-monitors', label: 'Monitors Off' },
-    { name: 'power-on-monitors', label: 'Monitors On' },
-    { name: 'close-window', label: 'Close Window' },
-    { name: 'switch-preset-column-width', label: 'Column Width' },
-    { name: 'focus-monitor-left', label: 'Mon Left' },
-    { name: 'focus-monitor-right', label: 'Mon Right' },
-    { name: 'move-window-to-monitor-left', label: 'Move Left' },
-    { name: 'move-window-to-monitor-right', label: 'Move Right' },
-  ];
+  interface NiriOutput {
+    name: string;
+    make?: string;
+    model?: string;
+    logical?: {
+      width: number;
+      height: number;
+      scale: number;
+    };
+  }
 
   let windows = $state<NiriWindow[]>([]);
   let workspaces = $state<NiriWorkspace[]>([]);
-  let swipedWindowId = $state<number | null>(null);
+  let outputs = $state<Record<string, NiriOutput>>({});
+  let selectedOutput = $state<string | null>(null);
   let cleanups: (() => void)[] = [];
 
-  let sortedWorkspaces = $derived(
-    [...workspaces].sort((a, b) => a.idx - b.idx)
+  // Active outputs (ones with a logical config = currently connected)
+  let activeOutputs = $derived(
+    Object.entries(outputs)
+      .filter(([_, o]) => o.logical)
+      .map(([name, o]) => ({ name, ...o }))
   );
 
-  let windowsByWorkspace = $derived(() => {
-    const map = new Map<number, NiriWindow[]>();
-    for (const w of windows) {
-      const wsId = w.workspace_id ?? 0;
-      if (!map.has(wsId)) map.set(wsId, []);
-      map.get(wsId)!.push(w);
+  let multiMonitor = $derived(activeOutputs.length > 1);
+
+  // Auto-select the focused output
+  $effect(() => {
+    if (!selectedOutput && activeOutputs.length > 0) {
+      const focusedWs = workspaces.find(ws => ws.is_focused);
+      selectedOutput = focusedWs?.output ?? activeOutputs[0].name;
     }
-    return map;
   });
 
-  let visibleActions = ALL_ACTIONS;
+  // Workspaces for the selected output, sorted by index
+  let outputWorkspaces = $derived(
+    workspaces
+      .filter(ws => ws.output === selectedOutput)
+      .sort((a, b) => a.idx - b.idx)
+  );
+
+  // Build spatial layout for a workspace
+  function getWorkspaceLayout(wsId: number) {
+    const wsWindows = windows.filter(w => w.workspace_id === wsId);
+    if (wsWindows.length === 0) return null;
+
+    // Find bounds
+    let minCol = Infinity, maxCol = -Infinity;
+    let totalWidth = 0;
+    let maxHeight = 0;
+
+    // Group by column
+    const columns = new Map<number, NiriWindow[]>();
+    for (const w of wsWindows) {
+      const col = w.layout?.pos_in_scrolling_layout?.[0] ?? 1;
+      if (!columns.has(col)) columns.set(col, []);
+      columns.get(col)!.push(w);
+      minCol = Math.min(minCol, col);
+      maxCol = Math.max(maxCol, col);
+    }
+
+    // Compute total width and max height
+    const sortedCols = [...columns.keys()].sort((a, b) => a - b);
+    const colWidths: number[] = [];
+    for (const col of sortedCols) {
+      const colWindows = columns.get(col)!;
+      const width = Math.max(...colWindows.map(w => w.layout?.tile_size?.[0] ?? 800));
+      colWidths.push(width);
+      totalWidth += width;
+
+      let colHeight = 0;
+      for (const w of colWindows) {
+        colHeight += w.layout?.tile_size?.[1] ?? 1080;
+      }
+      maxHeight = Math.max(maxHeight, colHeight);
+    }
+
+    return { columns, sortedCols, colWidths, totalWidth, maxHeight };
+  }
 
   async function fetchAll() {
     try {
-      const [w, ws] = await Promise.all([
-        api.get<NiriWindow[]>('/niri/windows'),
-        api.get<NiriWorkspace[]>('/niri/workspaces'),
+      const [w, ws, o] = await Promise.all([
+        api.get<any>('/niri/windows'),
+        api.get<any>('/niri/workspaces'),
+        api.get<any>('/niri/outputs'),
       ]);
-      windows = w;
-      workspaces = ws;
-    } catch {
-      // ignore
-    }
-  }
-
-  async function focusWorkspace(idx: number) {
-    try {
-      await api.post('/niri/action', { action: 'focus-workspace', args: { index: idx } });
+      if (Array.isArray(w)) windows = w;
+      if (Array.isArray(ws)) workspaces = ws;
+      if (o && typeof o === 'object' && !Array.isArray(o)) outputs = o;
     } catch {
       // ignore
     }
@@ -78,128 +123,90 @@
   async function focusWindow(id: number) {
     try {
       await api.post('/niri/action', { action: 'focus-window', args: { id } });
+      // Re-fetch to update focus state
+      setTimeout(fetchAll, 200);
     } catch {
       // ignore
-    }
-  }
-
-  async function closeWindow(id: number) {
-    swipedWindowId = null;
-    try {
-      await api.post('/niri/action', { action: 'close-window', args: { id } });
-      windows = windows.filter((w) => w.id !== id);
-    } catch {
-      // ignore
-    }
-  }
-
-  async function runAction(action: string) {
-    try {
-      await api.post('/niri/action', { action });
-    } catch {
-      // ignore
-    }
-  }
-
-  // Swipe handling for window items
-  let touchStartX = 0;
-
-  function handleWindowTouchStart(e: TouchEvent, id: number) {
-    touchStartX = e.touches[0].clientX;
-  }
-
-  function handleWindowTouchEnd(e: TouchEvent, id: number) {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (dx < -60) {
-      swipedWindowId = id;
-    } else {
-      if (swipedWindowId === id) {
-        swipedWindowId = null;
-      }
     }
   }
 
   onMount(() => {
     fetchAll();
-
     cleanups.push(
-      api.on('niri_event', (_msg) => {
-        // Re-fetch on any niri event for simplicity
-        fetchAll();
-      })
+      api.on('niri_event', () => { fetchAll(); })
     );
   });
 
   onDestroy(() => {
-    cleanups.forEach((fn) => fn());
+    cleanups.forEach(fn => fn());
   });
 </script>
 
 <div class="windows-page">
-  <!-- Workspace switcher -->
-  <section class="workspace-section">
-    <div class="workspace-strip">
-      {#each sortedWorkspaces as ws}
+  <!-- Monitor selector (hidden if single monitor) -->
+  {#if multiMonitor}
+    <div class="output-selector">
+      {#each activeOutputs as output}
         <button
-          class="workspace-tab"
-          class:active={ws.is_active}
-          onclick={() => focusWorkspace(ws.idx)}
+          class="output-tab"
+          class:active={selectedOutput === output.name}
+          onclick={() => { selectedOutput = output.name; }}
         >
-          {(ws.name || `${ws.idx}`).toUpperCase()}
+          {(output.model || output.name).toUpperCase()}
         </button>
       {/each}
     </div>
-  </section>
-
-  <!-- Window list -->
-  <section class="window-list">
-    {#each sortedWorkspaces as ws}
-      {@const wsWindows = windowsByWorkspace().get(ws.id) ?? []}
-      {#if wsWindows.length > 0}
-        <div class="ws-group">
-          <div class="ws-group-label">{(ws.name || `Workspace ${ws.idx}`).toUpperCase()}</div>
-          {#each wsWindows as win}
-            <div
-              class="window-item"
-              class:focused={win.is_focused}
-              class:swiped={swipedWindowId === win.id}
-              role="listitem"
-              ontouchstart={(e: TouchEvent) => handleWindowTouchStart(e, win.id)}
-              ontouchend={(e: TouchEvent) => handleWindowTouchEnd(e, win.id)}
-            >
-              <button class="window-content" onclick={() => focusWindow(win.id)}>
-                <span class="window-app">{(win.app_id || 'Unknown').toUpperCase()}</span>
-                <span class="window-title">{win.title}</span>
-              </button>
-              {#if swipedWindowId === win.id}
-                <button class="window-close" onclick={() => closeWindow(win.id)} aria-label="Close window">
-                  CLOSE
-                </button>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
-    {/each}
-    {#if windows.length === 0}
-      <div class="empty-state">NO WINDOWS OPEN</div>
-    {/if}
-  </section>
-
-  <!-- Action button grid -->
-  {#if visibleActions.length > 0}
-    <section class="actions-section">
-      <div class="section-label">ACTIONS</div>
-      <div class="action-grid">
-        {#each visibleActions as action}
-          <button class="action-btn" onclick={() => runAction(action.name)}>
-            {action.label.toUpperCase()}
-          </button>
-        {/each}
-      </div>
-    </section>
   {/if}
 
+  <!-- Workspace rows -->
+  <div class="workspace-scroll">
+    {#each outputWorkspaces as ws, wsIdx}
+      {@const layout = getWorkspaceLayout(ws.id)}
+      <div class="workspace-row" class:active={ws.is_active}>
+        <div class="workspace-label">
+          {ws.name?.toUpperCase() || wsIdx + 1}
+          {#if ws.is_active}
+            <span class="active-dot"></span>
+          {/if}
+        </div>
+
+        {#if layout}
+          <div class="columns-scroll">
+            <div
+              class="columns-container"
+              style="--total-cols: {layout.sortedCols.length}"
+            >
+              {#each layout.sortedCols as col, colIdx}
+                {@const colWindows = layout.columns.get(col) ?? []}
+                <div
+                  class="column"
+                  style="flex: {layout.colWidths[colIdx]}"
+                >
+                  {#each colWindows.sort((a, b) => (a.layout?.pos_in_scrolling_layout?.[1] ?? 0) - (b.layout?.pos_in_scrolling_layout?.[1] ?? 0)) as win}
+                    <button
+                      class="window-tile"
+                      class:focused={win.is_focused}
+                      onclick={() => focusWindow(win.id)}
+                      style="flex: {win.layout?.tile_size?.[1] ?? 1080}"
+                    >
+                      <span class="window-app">{(win.app_id || '?').toUpperCase()}</span>
+                      <span class="window-title">{win.title}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {:else}
+          <div class="empty-workspace">EMPTY</div>
+        {/if}
+      </div>
+    {/each}
+
+    {#if outputWorkspaces.length === 0}
+      <div class="empty-state">NO WORKSPACES</div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -207,40 +214,24 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    touch-action: pan-y;
-    gap: 0;
-    padding: 0;
+    overflow: hidden;
   }
 
-  .section-label {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    color: #666666;
-    letter-spacing: 0.15em;
-    padding: 16px 16px 8px;
-    border-top: 1px solid #333333;
-  }
-
-  /* Workspace switcher */
-  .workspace-section {
-    flex-shrink: 0;
-    border-bottom: 1px solid #333333;
-  }
-
-  .workspace-strip {
+  /* Monitor selector */
+  .output-selector {
     display: flex;
     gap: 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid #333333;
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  .workspace-strip::-webkit-scrollbar {
+  .output-selector::-webkit-scrollbar {
     display: none;
   }
 
-  .workspace-tab {
+  .output-tab {
     padding: 14px 20px;
     border: none;
     background: transparent;
@@ -253,155 +244,141 @@
     cursor: pointer;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
-    min-width: 48px;
-    text-align: center;
   }
 
-  .workspace-tab.active {
+  .output-tab.active {
     color: #ff2d2d;
     border-bottom-color: #ff2d2d;
   }
 
-  /* Window list */
-  .window-list {
+  /* Workspace scroll area */
+  .workspace-scroll {
     flex: 1;
-    min-height: 0;
     overflow-y: auto;
+    touch-action: pan-y;
+    padding: 8px 0;
   }
 
-  .ws-group {
-    margin-bottom: 0;
-  }
-
-  .ws-group-label {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    color: #333333;
-    letter-spacing: 0.15em;
-    padding: 12px 16px 4px;
-  }
-
-  .window-item {
-    display: flex;
-    position: relative;
-    overflow: hidden;
+  .workspace-row {
+    margin-bottom: 2px;
     border-bottom: 1px solid #1a1a1a;
   }
 
-  .window-content {
+  .workspace-label {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #333333;
+    letter-spacing: 0.1em;
+    padding: 8px 12px 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .active-dot {
+    width: 5px;
+    height: 5px;
+    background: #ff2d2d;
+    display: inline-block;
+  }
+
+  /* Horizontal scroll for columns within a workspace */
+  .columns-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    padding: 0 8px 8px;
+  }
+
+  .columns-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .columns-container {
+    display: flex;
+    gap: 2px;
+    min-width: min-content;
+    height: 120px;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 100px;
+    max-width: 280px;
+  }
+
+  .window-tile {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 12px 16px;
-    background: transparent;
-    border: none;
+    justify-content: center;
+    padding: 6px 10px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
     color: inherit;
     cursor: pointer;
     text-align: left;
-    min-height: 48px;
-    justify-content: center;
-    width: 100%;
+    overflow: hidden;
+    min-height: 0;
   }
 
-  .window-content:active {
-    color: #ff2d2d;
+  .window-tile.focused {
+    border-color: #ff2d2d;
   }
 
-  .window-item.focused .window-content {
-    border-left: 2px solid #ff2d2d;
+  .window-tile:active {
+    background: #222222;
   }
 
   .window-app {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 700;
     color: #666666;
     letter-spacing: 0.1em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
   }
 
   .window-title {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 300;
-    color: #ffffff;
+    color: #cccccc;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.3;
   }
 
-  .window-close {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 72px;
-    background: #ff2d2d;
-    border: none;
+  .window-tile.focused .window-title {
     color: #ffffff;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: slideIn 0.15s ease-out;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
   }
 
-  @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-    }
-    to {
-      transform: translateX(0);
-    }
+  .empty-workspace {
+    padding: 12px;
+    text-align: center;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    color: #222222;
   }
 
   .empty-state {
-    text-align: center;
-    color: #333333;
-    padding: 48px 16px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.2em;
+    color: #333333;
   }
-
-  /* Action grid */
-  .actions-section {
-    flex-shrink: 0;
-  }
-
-  .action-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0;
-    padding: 0 16px 16px;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px 8px;
-    background: transparent;
-    border: 1px solid #333333;
-    color: #ffffff;
-    cursor: pointer;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    text-align: center;
-    min-height: 48px;
-    margin-top: -1px;
-    margin-left: -1px;
-  }
-
-  .action-btn:active {
-    color: #ff2d2d;
-  }
-
 </style>
