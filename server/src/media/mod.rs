@@ -45,26 +45,30 @@ impl MediaController {
         let names = dbus_proxy.list_names().await?;
 
         let mut players = Vec::new();
-        let mut has_telemax_host = false;
-        for name in &names {
-            if name.as_str() == "org.mpris.MediaPlayer2.telemax" {
-                has_telemax_host = true;
-                break;
-            }
-        }
+
+        // Check if the KDE browser integration host is running (provides richer
+        // MPRIS data than Firefox/Zen's built-in MPRIS). If so, skip the
+        // browser's built-in entries which have ".instance_" in the name.
+        let has_browser_integration = names.iter().any(|n| {
+            let s = n.as_str();
+            s == "org.mpris.MediaPlayer2.telemax"
+                || s == "org.mpris.MediaPlayer2.plasma-browser-integration"
+        });
+
         for name in names {
             let name_str = name.as_str();
-            if name_str.starts_with("org.mpris.MediaPlayer2.") {
-                // Skip Firefox/Zen built-in MPRIS when the telemax host provides better data
-                if has_telemax_host && (name_str.contains(".firefox.instance_") || name_str.contains(".zen.instance_") || name_str.contains(".zen-browser.instance_")) {
-                    continue;
-                }
-                let display_name = self.get_player_display_name(name_str).await;
-                players.push(PlayerInfo {
-                    id: name_str.to_string(),
-                    name: display_name,
-                });
+            if !name_str.starts_with("org.mpris.MediaPlayer2.") {
+                continue;
             }
+            // Drop browser built-in MPRIS when the integration host is active
+            if has_browser_integration && name_str.contains(".instance_") {
+                continue;
+            }
+            let display_name = self.get_player_display_name(name_str).await;
+            players.push(PlayerInfo {
+                id: name_str.to_string(),
+                name: display_name,
+            });
         }
 
         Ok(players)
