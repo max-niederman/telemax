@@ -1,0 +1,14 @@
+/home/max/Projects/tool/niri-remote/host/target/debug/deps/uuid-72a037204b546f84.d: /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/lib.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/macros.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/builder.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/error.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/non_nil.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/parser.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/fmt.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/timestamp.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/external.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/external/serde_support.rs
+
+/home/max/Projects/tool/niri-remote/host/target/debug/deps/libuuid-72a037204b546f84.rmeta: /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/lib.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/macros.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/builder.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/error.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/non_nil.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/parser.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/fmt.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/timestamp.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/external.rs /tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/external/serde_support.rs
+
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/lib.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/macros.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/builder.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/error.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/non_nil.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/parser.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/fmt.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/timestamp.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/external.rs:
+/tmp/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0/src/external/serde_support.rs:
