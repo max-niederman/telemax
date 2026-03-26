@@ -32,7 +32,7 @@
           pname = "telemax";
           version = "0.1.0";
           src = ./server;
-          cargoHash = pkgs.lib.fakeHash;
+          cargoHash = "sha256-fpjeMfgJBYTIfaq2Ni2owKKqCdubAxpAfR35/QRg5yk=";
 
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = [ pkgs.libpulseaudio ];
