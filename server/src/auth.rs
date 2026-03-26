@@ -201,6 +201,8 @@ fn load_sessions() -> HashSet<String> {
 }
 
 async fn save_sessions(sessions: &RwLock<HashSet<String>>) {
+    use std::os::unix::fs::OpenOptionsExt;
+
     let path = sessions_path();
     let sessions = sessions.read().await;
     let tokens: Vec<&String> = sessions.iter().collect();
@@ -208,7 +210,13 @@ async fn save_sessions(sessions: &RwLock<HashSet<String>>) {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let _ = std::fs::write(&path, json);
+        let _ = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, json.as_bytes()));
     }
 }
 

@@ -130,10 +130,8 @@
   function toggleKeyboard() {
     keyboardOpen = !keyboardOpen;
     if (keyboardOpen) {
-      // Focus hidden input on next tick to bring up mobile keyboard
-      setTimeout(() => {
-        hiddenInput?.focus({ preventScroll: true });
-      });
+      // Must be synchronous within the click handler for iOS to open keyboard
+      hiddenInput?.focus();
     } else {
       hiddenInput?.blur();
     }
@@ -393,12 +391,17 @@
   }
 
   .hidden-input {
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: auto;
+    position: fixed;
+    bottom: 48px;
+    left: 0;
+    width: 100%;
+    height: 44px;
+    opacity: 0.01;
+    z-index: 5;
+    font-size: 16px; /* prevents iOS zoom */
+    background: transparent;
+    border: none;
+    color: transparent;
+    caret-color: transparent;
   }
 </style>

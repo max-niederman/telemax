@@ -99,7 +99,9 @@ export class ApiClient {
 
   /** Generate a random 6-digit code */
   generateCode(): string {
-    return String(Math.floor(Math.random() * 1000000)).padStart(6, '0');
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return String(buf[0] % 1000000).padStart(6, '0');
   }
 
   /** Register a pairing request with the server */
@@ -143,10 +145,8 @@ export class ApiClient {
   }
 
   connectWs() {
-    const token = this.getToken();
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const params = token ? `?token=${encodeURIComponent(token)}` : '';
-    this.ws = new WebSocket(`${proto}//${location.host}${base}/api/ws${params}`);
+    this.ws = new WebSocket(`${proto}//${location.host}${base}/api/ws`);
     this.ws.onopen = () => { this._connected = true; this.reconnectDelay = WS_RECONNECT_BASE; };
     this.ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
