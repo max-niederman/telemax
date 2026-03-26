@@ -10,7 +10,16 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
+
+/// Hash a raw token to produce the stored form.
+/// Only the hash is persisted; the raw token is only held by the client.
+fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
+}
 
 #[derive(Serialize)]
 struct ErrorBody {
@@ -41,7 +50,8 @@ impl PairingState {
     }
 
     pub async fn verify_token(&self, token: &str) -> bool {
-        self.sessions.read().await.contains(token)
+        let hashed = hash_token(token);
+        self.sessions.read().await.contains(&hashed)
     }
 
     pub async fn pair(&self, submitted_code: &str) -> Option<String> {
@@ -49,9 +59,10 @@ impl PairingState {
         if submitted_code != *code {
             return None;
         }
-        // Code matched — generate session token, rotate code
+        // Code matched — generate session token, store only the hash
         let token = uuid::Uuid::new_v4().to_string();
-        self.sessions.write().await.insert(token.clone());
+        let hashed = hash_token(&token);
+        self.sessions.write().await.insert(hashed);
         save_sessions(&self.sessions).await;
         *code = generate_code();
         show_pairing_code(&code);
