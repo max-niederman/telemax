@@ -5,7 +5,6 @@
   interface WindowLayout {
     pos_in_scrolling_layout?: [number, number];
     tile_size?: [number, number];
-    window_size?: [number, number];
   }
 
   interface NiriWindow {
@@ -38,6 +37,8 @@
   let selectedOutput = $state<string | null>(null);
   let containerWidth = $state(390);
   let containerEl: HTMLDivElement;
+  let scrollArea: HTMLDivElement;
+  let hasScrolledInitially = false;
   let cleanups: (() => void)[] = [];
 
   let activeOutputs = $derived(
@@ -48,7 +49,6 @@
 
   let multiMonitor = $derived(activeOutputs.length > 1);
 
-  // Auto-select focused output
   $effect(() => {
     if (!selectedOutput && activeOutputs.length > 0) {
       const focusedWs = workspaces.find(ws => ws.is_focused);
@@ -56,7 +56,6 @@
     }
   });
 
-  // Workspaces for selected output, sorted, non-empty only
   let outputWorkspaces = $derived(
     workspaces
       .filter(ws => ws.output === selectedOutput)
@@ -64,13 +63,14 @@
       .sort((a, b) => a.idx - b.idx)
   );
 
-  // Monitor dimensions
   let monitorWidth = $derived(
     outputs[selectedOutput ?? '']?.logical?.width ?? 3840
   );
   let monitorHeight = $derived(
     outputs[selectedOutput ?? '']?.logical?.height ?? 2160
   );
+
+  let scale = $derived(containerWidth / monitorWidth);
 
   interface RenderedWindow {
     win: NiriWindow;
@@ -85,77 +85,69 @@
     totalWidth: number;
     totalHeight: number;
     windows: RenderedWindow[];
-    scrollOffset: number; // x offset to center the active window
   }
 
-  // Build absolute-positioned layout for each workspace
-  function buildLayout(wsId: number, activeWindowId: number | null | undefined): RenderedWorkspace | null {
-    const ws = workspaces.find(w => w.id === wsId);
-    if (!ws) return null;
+  // Find the widest workspace to set the shared canvas width
+  function buildLayouts(): { layouts: RenderedWorkspace[]; maxTotalWidth: number; initialScrollX: number } {
+    const layouts: RenderedWorkspace[] = [];
+    let maxTotalWidth = monitorWidth; // at minimum, the monitor width
+    let initialScrollX = 0;
 
-    const wsWindows = windows.filter(w => w.workspace_id === wsId);
-    if (wsWindows.length === 0) return null;
+    for (const ws of outputWorkspaces) {
+      const wsWindows = windows.filter(w => w.workspace_id === ws.id);
+      if (wsWindows.length === 0) continue;
 
-    // Group by column
-    const columns = new Map<number, NiriWindow[]>();
-    for (const w of wsWindows) {
-      const col = w.layout?.pos_in_scrolling_layout?.[0] ?? 1;
-      if (!columns.has(col)) columns.set(col, []);
-      columns.get(col)!.push(w);
-    }
-
-    const sortedCols = [...columns.keys()].sort((a, b) => a - b);
-
-    // Calculate column widths and x positions
-    const colMeta: { col: number; x: number; width: number }[] = [];
-    let xCursor = 0;
-    for (const col of sortedCols) {
-      const colWindows = columns.get(col)!;
-      const width = Math.max(...colWindows.map(w => w.layout?.tile_size?.[0] ?? 800));
-      colMeta.push({ col, x: xCursor, width });
-      xCursor += width;
-    }
-    const totalWidth = xCursor;
-
-    // Build rendered windows with absolute positions
-    const rendered: RenderedWindow[] = [];
-    let maxHeight = 0;
-
-    for (const { col, x, width } of colMeta) {
-      const colWindows = columns.get(col)!.sort(
-        (a, b) => (a.layout?.pos_in_scrolling_layout?.[1] ?? 0) - (b.layout?.pos_in_scrolling_layout?.[1] ?? 0)
-      );
-      let yCursor = 0;
-      for (const win of colWindows) {
-        const h = win.layout?.tile_size?.[1] ?? monitorHeight;
-        const w = win.layout?.tile_size?.[0] ?? width;
-        rendered.push({ win, x, y: yCursor, w, h });
-        yCursor += h;
+      const columns = new Map<number, NiriWindow[]>();
+      for (const w of wsWindows) {
+        const col = w.layout?.pos_in_scrolling_layout?.[0] ?? 1;
+        if (!columns.has(col)) columns.set(col, []);
+        columns.get(col)!.push(w);
       }
-      maxHeight = Math.max(maxHeight, yCursor);
-    }
 
-    // Calculate scroll offset to center the active window's column
-    let scrollOffset = 0;
-    if (activeWindowId != null) {
-      const activeWin = rendered.find(r => r.win.id === activeWindowId);
-      if (activeWin) {
-        // Center the active window's column in the monitor viewport
-        const centerOfWindow = activeWin.x + activeWin.w / 2;
-        scrollOffset = centerOfWindow - monitorWidth / 2;
-        // Clamp so we don't go past the edges
-        scrollOffset = Math.max(0, Math.min(scrollOffset, totalWidth - monitorWidth));
+      const sortedCols = [...columns.keys()].sort((a, b) => a - b);
+      const rendered: RenderedWindow[] = [];
+      let xCursor = 0;
+      let maxHeight = 0;
+
+      for (const col of sortedCols) {
+        const colWindows = columns.get(col)!.sort(
+          (a, b) => (a.layout?.pos_in_scrolling_layout?.[1] ?? 0) - (b.layout?.pos_in_scrolling_layout?.[1] ?? 0)
+        );
+        const colWidth = Math.max(...colWindows.map(w => w.layout?.tile_size?.[0] ?? 800));
+        let yCursor = 0;
+        for (const win of colWindows) {
+          const h = win.layout?.tile_size?.[1] ?? monitorHeight;
+          const w = win.layout?.tile_size?.[0] ?? colWidth;
+          rendered.push({ win, x: xCursor, y: yCursor, w, h });
+          yCursor += h;
+
+          // Find scroll position: center the active window of the active workspace
+          if (ws.is_active && win.id === ws.active_window_id) {
+            const centerX = xCursor + w / 2;
+            initialScrollX = Math.max(0, centerX - monitorWidth / 2);
+          }
+        }
+        maxHeight = Math.max(maxHeight, yCursor);
+        xCursor += colWidth;
       }
+
+      const totalWidth = xCursor;
+      maxTotalWidth = Math.max(maxTotalWidth, totalWidth);
+      layouts.push({ ws, totalWidth, totalHeight: maxHeight, windows: rendered });
     }
 
-    return { ws, totalWidth, totalHeight: maxHeight, windows: rendered, scrollOffset };
+    return { layouts, maxTotalWidth, initialScrollX };
   }
 
-  let renderedWorkspaces = $derived(
-    outputWorkspaces
-      .map(ws => buildLayout(ws.id, ws.active_window_id))
-      .filter((l): l is RenderedWorkspace => l !== null)
-  );
+  let layoutData = $derived(buildLayouts());
+
+  // Set initial scroll to center the active window
+  $effect(() => {
+    if (scrollArea && layoutData.layouts.length > 0 && !hasScrolledInitially) {
+      scrollArea.scrollLeft = layoutData.initialScrollX * scale;
+      hasScrolledInitially = true;
+    }
+  });
 
   async function fetchAll() {
     try {
@@ -180,7 +172,6 @@
   onMount(() => {
     fetchAll();
     cleanups.push(api.on('niri_event', () => fetchAll()));
-    // Track container width
     if (containerEl) {
       containerWidth = containerEl.clientWidth;
       const ro = new ResizeObserver(([entry]) => {
@@ -196,14 +187,14 @@
   });
 </script>
 
-<div class="windows-page">
+<div class="windows-page" bind:this={containerEl}>
   {#if multiMonitor}
     <div class="output-selector">
       {#each activeOutputs as output}
         <button
           class="output-tab"
           class:active={selectedOutput === output.name}
-          onclick={() => { selectedOutput = output.name; }}
+          onclick={() => { selectedOutput = output.name; hasScrolledInitially = false; }}
         >
           {(output.model || output.name).toUpperCase()}
         </button>
@@ -211,28 +202,20 @@
     </div>
   {/if}
 
-  <div class="workspaces-scroll" bind:this={containerEl}>
-    {#each renderedWorkspaces as layout, wsIdx}
-      {@const scale = containerWidth / monitorWidth}
-      {@const viewportHeight = monitorHeight * scale}
-      {@const isActive = layout.ws.is_active}
-      <div class="workspace-container" class:active={isActive}>
-        <div class="workspace-header">
-          <span class="ws-idx">{layout.ws.name?.toUpperCase() || wsIdx + 1}</span>
-          {#if isActive}<span class="active-marker"></span>{/if}
-        </div>
-        <div
-          class="viewport"
-          style="height: {viewportHeight}px"
-        >
-          <div
-            class="layout-canvas"
-            style="
-              width: {layout.totalWidth * scale}px;
-              height: {layout.totalHeight * scale}px;
-              transform: translateX({-layout.scrollOffset * scale}px);
-            "
-          >
+  <div class="scroll-area" bind:this={scrollArea}>
+    <div
+      class="scroll-canvas"
+      style="width: {layoutData.maxTotalWidth * scale}px"
+    >
+      {#each layoutData.layouts as layout, wsIdx}
+        {@const viewportHeight = monitorHeight * scale}
+        {@const isActive = layout.ws.is_active}
+        <div class="workspace-row" class:active={isActive}>
+          <div class="workspace-header">
+            <span class="ws-idx">{layout.ws.name?.toUpperCase() || wsIdx + 1}</span>
+            {#if isActive}<span class="active-marker"></span>{/if}
+          </div>
+          <div class="workspace-canvas" style="height: {layout.totalHeight * scale}px">
             {#each layout.windows as rw}
               <button
                 class="win-tile"
@@ -252,13 +235,13 @@
             {/each}
           </div>
         </div>
-      </div>
-    {/each}
-
-    {#if renderedWorkspaces.length === 0}
-      <div class="empty">NO WINDOWS</div>
-    {/if}
+      {/each}
+    </div>
   </div>
+
+  {#if layoutData.layouts.length === 0}
+    <div class="empty">NO WINDOWS</div>
+  {/if}
 </div>
 
 <style>
@@ -297,16 +280,22 @@
     border-bottom-color: #ff2d2d;
   }
 
-  .workspaces-scroll {
+  /* Single horizontal+vertical scroll area for all workspaces */
+  .scroll-area {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    touch-action: pan-y;
+    overflow: auto;
+    touch-action: pan-x pan-y;
+    scrollbar-width: none;
+  }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  .scroll-canvas {
+    min-width: 100%;
     padding: 8px 0 24px;
   }
 
-  .workspace-container {
-    margin-bottom: 12px;
+  .workspace-row {
+    margin-bottom: 8px;
   }
 
   .workspace-header {
@@ -314,6 +303,8 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
+    position: sticky;
+    left: 0;
   }
 
   .ws-idx {
@@ -324,7 +315,7 @@
     letter-spacing: 0.1em;
   }
 
-  .workspace-container.active .ws-idx {
+  .workspace-row.active .ws-idx {
     color: #888888;
   }
 
@@ -334,15 +325,9 @@
     background: #ff2d2d;
   }
 
-  .viewport {
-    overflow: hidden;
+  .workspace-canvas {
     position: relative;
-  }
-
-  .layout-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
+    min-width: 100%;
   }
 
   .win-tile {
