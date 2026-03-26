@@ -44,7 +44,6 @@ in
 
       environment = {
         TELEMAX_WEB_DIR = "${pkgs.telemax-web}";
-        NIRI_SOCKET = "%t/niri-socket";
         RUST_LOG = "info";
       };
 
