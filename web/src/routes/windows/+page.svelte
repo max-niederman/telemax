@@ -37,9 +37,17 @@
   let selectedOutput = $state<string | null>(null);
   let containerWidth = $state(390);
   let containerEl: HTMLDivElement;
-  let scrollArea: HTMLDivElement;
-  let hasScrolledInitially = false;
   let cleanups: (() => void)[] = [];
+
+  // Horizontal pan state — shared across all workspaces
+  let panX = $state(0); // current offset in scaled px (negative = scrolled right)
+  let panStartX = 0;
+  let panStartOffset = 0;
+  let isPanning = false;
+  let panVelocity = 0;
+  let lastPanX = 0;
+  let lastPanTime = 0;
+  let momentumRaf: number | null = null;
 
   let activeOutputs = $derived(
     Object.entries(outputs)
@@ -63,21 +71,13 @@
       .sort((a, b) => a.idx - b.idx)
   );
 
-  let monitorWidth = $derived(
-    outputs[selectedOutput ?? '']?.logical?.width ?? 3840
-  );
-  let monitorHeight = $derived(
-    outputs[selectedOutput ?? '']?.logical?.height ?? 2160
-  );
-
+  let monitorWidth = $derived(outputs[selectedOutput ?? '']?.logical?.width ?? 3840);
+  let monitorHeight = $derived(outputs[selectedOutput ?? '']?.logical?.height ?? 2160);
   let scale = $derived(containerWidth / monitorWidth);
 
   interface RenderedWindow {
     win: NiriWindow;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
+    x: number; y: number; w: number; h: number;
   }
 
   interface RenderedWorkspace {
@@ -87,11 +87,10 @@
     windows: RenderedWindow[];
   }
 
-  // Find the widest workspace to set the shared canvas width
-  function buildLayouts(): { layouts: RenderedWorkspace[]; maxTotalWidth: number; initialScrollX: number } {
+  function buildLayouts(): { layouts: RenderedWorkspace[]; maxTotalWidth: number; initialPanX: number } {
     const layouts: RenderedWorkspace[] = [];
-    let maxTotalWidth = monitorWidth; // at minimum, the monitor width
-    let initialScrollX = 0;
+    let maxTotalWidth = monitorWidth;
+    let initialPanX = 0;
 
     for (const ws of outputWorkspaces) {
       const wsWindows = windows.filter(w => w.workspace_id === ws.id);
@@ -121,33 +120,74 @@
           rendered.push({ win, x: xCursor, y: yCursor, w, h });
           yCursor += h;
 
-          // Find scroll position: center the active window of the active workspace
           if (ws.is_active && win.id === ws.active_window_id) {
             const centerX = xCursor + w / 2;
-            initialScrollX = Math.max(0, centerX - monitorWidth / 2);
+            initialPanX = -(Math.max(0, centerX - monitorWidth / 2));
           }
         }
         maxHeight = Math.max(maxHeight, yCursor);
         xCursor += colWidth;
       }
 
-      const totalWidth = xCursor;
-      maxTotalWidth = Math.max(maxTotalWidth, totalWidth);
-      layouts.push({ ws, totalWidth, totalHeight: maxHeight, windows: rendered });
+      maxTotalWidth = Math.max(maxTotalWidth, xCursor);
+      layouts.push({ ws, totalWidth: xCursor, totalHeight: maxHeight, windows: rendered });
     }
 
-    return { layouts, maxTotalWidth, initialScrollX };
+    return { layouts, maxTotalWidth, initialPanX };
   }
 
   let layoutData = $derived(buildLayouts());
+  let maxPan = $derived(Math.max(0, layoutData.maxTotalWidth - monitorWidth));
 
-  // Set initial scroll to center the active window
+  // Clamp panX within bounds
+  function clampPan(x: number): number {
+    return Math.max(-maxPan * scale, Math.min(0, x));
+  }
+
+  // Set initial pan on first data load
+  let hasInitialized = false;
   $effect(() => {
-    if (scrollArea && layoutData.layouts.length > 0 && !hasScrolledInitially) {
-      scrollArea.scrollLeft = layoutData.initialScrollX * scale;
-      hasScrolledInitially = true;
+    if (layoutData.layouts.length > 0 && !hasInitialized) {
+      panX = clampPan(layoutData.initialPanX * scale);
+      hasInitialized = true;
     }
   });
+
+  // Touch handlers for horizontal panning
+  function handleTouchStart(e: TouchEvent) {
+    if (momentumRaf) { cancelAnimationFrame(momentumRaf); momentumRaf = null; }
+    isPanning = true;
+    panStartX = e.touches[0].clientX;
+    panStartOffset = panX;
+    panVelocity = 0;
+    lastPanX = e.touches[0].clientX;
+    lastPanTime = performance.now();
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (!isPanning) return;
+    e.preventDefault();
+    const x = e.touches[0].clientX;
+    const now = performance.now();
+    const dt = now - lastPanTime;
+    if (dt > 0) panVelocity = (x - lastPanX) / dt;
+    lastPanX = x;
+    lastPanTime = now;
+    panX = clampPan(panStartOffset + (x - panStartX));
+  }
+
+  function handleTouchEnd() {
+    isPanning = false;
+    // Momentum scrolling
+    const decel = 0.95;
+    function momentum() {
+      panVelocity *= decel;
+      if (Math.abs(panVelocity) < 0.01) return;
+      panX = clampPan(panX + panVelocity * 16);
+      momentumRaf = requestAnimationFrame(momentum);
+    }
+    momentumRaf = requestAnimationFrame(momentum);
+  }
 
   async function fetchAll() {
     try {
@@ -159,17 +199,15 @@
       if (Array.isArray(w)) windows = w;
       if (Array.isArray(ws)) workspaces = ws;
       if (o && typeof o === 'object' && !Array.isArray(o)) outputs = o;
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  async function focusWindow(id: number) {
+  function focusWindow(id: number) {
     api.post('/niri/action', { action: 'focus-window', args: { id } }).catch(() => {});
   }
 
   onMount(() => {
-    fetchAll(); // initial load, then WebSocket takes over
+    fetchAll();
     cleanups.push(
       api.on('niri_state', (msg: any) => {
         if (Array.isArray(msg.windows)) windows = msg.windows;
@@ -179,15 +217,14 @@
     );
     if (containerEl) {
       containerWidth = containerEl.clientWidth;
-      const ro = new ResizeObserver(([entry]) => {
-        containerWidth = entry.contentRect.width;
-      });
+      const ro = new ResizeObserver(([entry]) => { containerWidth = entry.contentRect.width; });
       ro.observe(containerEl);
       cleanups.push(() => ro.disconnect());
     }
   });
 
   onDestroy(() => {
+    if (momentumRaf) cancelAnimationFrame(momentumRaf);
     cleanups.forEach(fn => fn());
   });
 </script>
@@ -199,7 +236,7 @@
         <button
           class="output-tab"
           class:active={selectedOutput === output.name}
-          onclick={() => { selectedOutput = output.name; hasScrolledInitially = false; }}
+          onclick={() => { selectedOutput = output.name; hasInitialized = false; }}
         >
           {(output.model || output.name).toUpperCase()}
         </button>
@@ -207,46 +244,48 @@
     </div>
   {/if}
 
-  <div class="scroll-area" bind:this={scrollArea}>
-    <div
-      class="scroll-canvas"
-      style="width: {layoutData.maxTotalWidth * scale}px"
-    >
-      {#each layoutData.layouts as layout, wsIdx}
-        {@const viewportHeight = monitorHeight * scale}
-        {@const isActive = layout.ws.is_active}
-        <div class="workspace-row" class:active={isActive}>
-          <div class="workspace-header">
-            <span class="ws-idx">{layout.ws.name?.toUpperCase() || wsIdx + 1}</span>
-            {#if isActive}<span class="active-marker"></span>{/if}
-          </div>
-          <div class="workspace-canvas" style="height: {layout.totalHeight * scale}px">
-            {#each layout.windows as rw}
-              <button
-                class="win-tile"
-                class:focused={rw.win.is_focused}
-                class:active-win={rw.win.id === layout.ws.active_window_id}
-                style="
-                  left: {rw.x * scale}px;
-                  top: {rw.y * scale}px;
-                  width: {rw.w * scale}px;
-                  height: {rw.h * scale}px;
-                "
-                onclick={() => focusWindow(rw.win.id)}
-              >
-                <span class="win-app">{(rw.win.app_id || '?').toUpperCase()}</span>
-                <span class="win-title">{rw.win.title}</span>
-              </button>
-            {/each}
-          </div>
+  <div
+    class="workspace-list"
+    ontouchstart={handleTouchStart}
+    ontouchmove={handleTouchMove}
+    ontouchend={handleTouchEnd}
+  >
+    {#each layoutData.layouts as layout, wsIdx}
+      {@const isActive = layout.ws.is_active}
+      <div class="workspace-row" class:active={isActive}>
+        <div class="workspace-header">
+          <span class="ws-idx">{layout.ws.name?.toUpperCase() || wsIdx + 1}</span>
+          {#if isActive}<span class="active-marker"></span>{/if}
         </div>
-      {/each}
-    </div>
-  </div>
+        <div
+          class="workspace-canvas"
+          style="height: {layout.totalHeight * scale}px"
+        >
+          {#each layout.windows as rw}
+            <button
+              class="win-tile"
+              class:focused={rw.win.is_focused}
+              class:active-win={rw.win.id === layout.ws.active_window_id}
+              style="
+                left: {rw.x * scale + panX}px;
+                top: {rw.y * scale}px;
+                width: {rw.w * scale}px;
+                height: {rw.h * scale}px;
+              "
+              onclick={() => focusWindow(rw.win.id)}
+            >
+              <span class="win-app">{(rw.win.app_id || '?').toUpperCase()}</span>
+              <span class="win-title">{rw.win.title}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/each}
 
-  {#if layoutData.layouts.length === 0}
-    <div class="empty">NO WINDOWS</div>
-  {/if}
+    {#if layoutData.layouts.length === 0}
+      <div class="empty">NO WINDOWS</div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -285,17 +324,11 @@
     border-bottom-color: #ff2d2d;
   }
 
-  /* Single horizontal+vertical scroll area for all workspaces */
-  .scroll-area {
+  .workspace-list {
     flex: 1;
-    overflow: auto;
-    touch-action: pan-x pan-y;
-    scrollbar-width: none;
-  }
-  .scroll-area::-webkit-scrollbar { display: none; }
-
-  .scroll-canvas {
-    min-width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
     padding: 8px 0 24px;
   }
 
@@ -308,8 +341,6 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    position: sticky;
-    left: 0;
   }
 
   .ws-idx {
@@ -332,7 +363,7 @@
 
   .workspace-canvas {
     position: relative;
-    min-width: 100%;
+    overflow: hidden;
   }
 
   .win-tile {
