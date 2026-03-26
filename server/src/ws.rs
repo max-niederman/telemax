@@ -36,17 +36,11 @@ enum WsInput {
 enum WsOutput {
     #[serde(rename = "audio_level")]
     AudioLevel { bands: Vec<f32> },
-    #[serde(rename = "media_progress")]
-    MediaProgress {
-        position_ms: i64,
-        duration_ms: i64,
-    },
-    #[serde(rename = "media_changed")]
-    MediaChanged {
-        title: String,
-        artist: String,
-        album: String,
-        art_url: String,
+    #[serde(rename = "media_state")]
+    MediaState {
+        #[serde(flatten)]
+        state: crate::media::MediaState,
+        players: Vec<crate::media::PlayerInfo>,
     },
     #[serde(rename = "niri_event")]
     NiriEvent { event: serde_json::Value },
@@ -98,24 +92,37 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     });
 
-    // Sender task 2: Media progress polling every 1 second
+    // Sender task 2: Media state — poll at 4Hz, send full state on change, position at 1Hz
     let media_out_tx = out_tx.clone();
     let media = state.media.clone();
     let media_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+        let mut last_sent: Option<String> = None; // JSON of last sent state (for diffing)
+        let mut position_tick: u8 = 0;
         loop {
             interval.tick().await;
-            if let Ok(media_state) = media.get_state().await {
-                if let (Some(position_ms), Some(duration_ms)) =
-                    (media_state.position_ms, media_state.duration_ms)
-                {
-                    let msg = WsOutput::MediaProgress {
-                        position_ms,
-                        duration_ms,
-                    };
-                    if media_out_tx.send(msg).await.is_err() {
-                        break;
-                    }
+            let Ok(media_state) = media.get_state().await else { continue };
+            let players = media.list_players().await.unwrap_or_default();
+
+            // Serialize for comparison (excluding position which changes continuously)
+            let mut cmp_state = media_state.clone();
+            cmp_state.position_ms = None;
+            let cmp_json = serde_json::to_string(&cmp_state).unwrap_or_default();
+
+            let state_changed = last_sent.as_ref() != Some(&cmp_json);
+            position_tick = position_tick.wrapping_add(1);
+            let position_due = position_tick % 4 == 0; // every 1s (4 * 250ms)
+
+            if state_changed || position_due {
+                let msg = WsOutput::MediaState {
+                    state: media_state,
+                    players,
+                };
+                if media_out_tx.send(msg).await.is_err() {
+                    break;
+                }
+                if state_changed {
+                    last_sent = Some(cmp_json);
                 }
             }
         }

@@ -3,142 +3,99 @@
   import { api } from '$lib/api.svelte';
   import type { MediaState, PlayerInfo } from '$lib/types';
 
-  let media = $state<MediaState>({
-    status: 'stopped',
-  });
+  // --- State: set ONLY by WebSocket, never by actions ---
+  let media = $state<MediaState>({ status: 'stopped' });
   let players = $state<PlayerInfo[]>([]);
   let audioBands = $state<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  const bandLabels = ['60', '150', '400', '1k', '2.5k', '6k', '12k', '16k', '20k'];
+
+  // --- Local interaction state ---
   let seeking = $state(false);
   let seekPosition = $state(0);
-  let pollTimer: ReturnType<typeof setInterval>;
+  let volumeDragging = $state(false);
+  let localVolume = $state(0.5);
+
+  // --- Position interpolation ---
+  let serverPosition = $state(0);     // last position from server
+  let serverTimestamp = $state(0);     // when we received it (performance.now())
+  let interpolatedPosition = $state(0);
+  let rafId: number | null = null;
+
   let cleanups: (() => void)[] = [];
 
-  // Derived
+  // --- Derived ---
   let isPlaying = $derived(media.status === 'Playing' || media.status === 'playing');
-  let progress = $derived(
-    media.duration_ms && media.duration_ms > 0
-      ? ((seeking ? seekPosition : (media.position_ms ?? 0)) / media.duration_ms) * 100
-      : 0
-  );
-  let elapsed = $derived(seeking ? seekPosition : (media.position_ms ?? 0));
   let duration = $derived(media.duration_ms ?? 0);
+  let displayPosition = $derived(seeking ? seekPosition : interpolatedPosition);
+  let progress = $derived(duration > 0 ? (displayPosition / duration) * 100 : 0);
+  let displayVolume = $derived(volumeDragging ? localVolume : (media.volume ?? 0.5));
   let shuffleOn = $derived(media.shuffle === true);
   let repeatMode = $derived(media.repeat ?? 'None');
 
   function formatTime(ms: number): string {
-    const totalSeconds = Math.floor(ms / 1000);
+    const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
-  async function fetchMedia() {
-    try {
-      const state = await api.get<MediaState>('/media');
-      media = state;
-    } catch {
-      // ignore
+  // --- Position interpolation loop ---
+  function tick() {
+    if (isPlaying && !seeking) {
+      const elapsed = performance.now() - serverTimestamp;
+      interpolatedPosition = serverPosition + elapsed;
+      if (duration > 0) {
+        interpolatedPosition = Math.min(interpolatedPosition, duration);
+      }
     }
+    rafId = requestAnimationFrame(tick);
   }
 
-  async function fetchPlayers() {
-    try {
-      players = await api.get<PlayerInfo[]>('/media/players');
-    } catch {
-      // ignore
-    }
+  // --- Actions: fire-and-forget, state comes back via WebSocket ---
+  function action(name: string) {
+    api.post(`/media/${name}`).catch(() => {});
   }
 
-  async function transport(action: string) {
-    // Optimistic UI update
-    if (action === 'play') media.status = 'Playing';
-    else if (action === 'pause') media.status = 'Paused';
-    try {
-      await api.post(`/media/${action}`);
-      await fetchMedia();
-    } catch {
-      // ignore
-    }
+  function skip(seconds: number) {
+    const pos = Math.max(0, Math.min(duration, displayPosition + seconds * 1000));
+    // Immediately update interpolation base so it feels instant
+    serverPosition = pos;
+    serverTimestamp = performance.now();
+    interpolatedPosition = pos;
+    api.post('/media/seek', { position_ms: Math.round(pos) }).catch(() => {});
   }
 
-  async function skip(seconds: number) {
-    const newPos = Math.max(0, Math.min(duration, (media.position_ms ?? 0) + seconds * 1000));
-    media.position_ms = newPos;
-    try {
-      await api.post('/media/seek', { position_ms: newPos });
-    } catch {
-      // ignore
-    }
+  function selectPlayer(id: string) {
+    api.post('/media/player', { id }).catch(() => {});
   }
 
-  async function toggleShuffle() {
-    media.shuffle = !media.shuffle;
-    try {
-      await api.post('/media/shuffle');
-    } catch {
-      // ignore
-    }
+  function toggleShuffle() {
+    api.post('/media/shuffle').catch(() => {});
   }
 
-  async function toggleRepeat() {
-    const cycle: Record<string, string> = { 'None': 'Track', 'Track': 'Playlist', 'Playlist': 'None' };
-    media.repeat = cycle[media.repeat ?? 'None'] ?? 'None';
-    try {
-      await api.post('/media/repeat');
-    } catch {
-      // ignore
-    }
+  function toggleRepeat() {
+    api.post('/media/repeat').catch(() => {});
   }
 
-  let localVolume = $state<number | null>(null);
-  let volumeTimeout: ReturnType<typeof setTimeout> | undefined;
-  let displayVolume = $derived(localVolume ?? media.volume ?? 0.5);
-
-  async function setVolume(vol: number) {
-    localVolume = vol;
-    clearTimeout(volumeTimeout);
-    volumeTimeout = setTimeout(() => { localVolume = null; }, 2000);
-    try {
-      await api.post('/media/volume', { volume: vol });
-    } catch {
-      // ignore
-    }
-  }
-
-  async function seekTo(posMs: number) {
-    try {
-      await api.post('/media/seek', { position_ms: posMs });
-    } catch {
-      // ignore
-    }
-  }
-
-  async function selectPlayer(id: string) {
-    try {
-      await api.post('/media/player', { id });
-      await fetchMedia();
-    } catch {
-      // ignore
-    }
-  }
-
-  function handleProgressPointerDown(e: PointerEvent) {
+  // --- Seek interaction ---
+  function handleSeekDown(e: PointerEvent) {
     if (!duration) return;
     seeking = true;
     updateSeekFromEvent(e);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
-  function handleProgressPointerMove(e: PointerEvent) {
+  function handleSeekMove(e: PointerEvent) {
     if (!seeking) return;
     updateSeekFromEvent(e);
   }
 
-  function handleProgressPointerUp(_e: PointerEvent) {
+  function handleSeekUp() {
     if (!seeking) return;
     seeking = false;
-    seekTo(seekPosition);
+    serverPosition = seekPosition;
+    serverTimestamp = performance.now();
+    interpolatedPosition = seekPosition;
+    api.post('/media/seek', { position_ms: Math.round(seekPosition) }).catch(() => {});
   }
 
   function updateSeekFromEvent(e: PointerEvent) {
@@ -148,29 +105,56 @@
     seekPosition = ratio * duration;
   }
 
+  // --- Volume interaction ---
   function handleVolumeInput(e: Event) {
     const value = parseFloat((e.target as HTMLInputElement).value);
-    setVolume(value);
+    localVolume = value;
+    volumeDragging = true;
+    api.post('/media/volume', { volume: value }).catch(() => {});
   }
 
+  function handleVolumeChange() {
+    // Release — stop overriding server value after a short delay
+    setTimeout(() => { volumeDragging = false; }, 1000);
+  }
+
+  // --- Lifecycle ---
   onMount(() => {
-    fetchMedia();
-    fetchPlayers();
+    rafId = requestAnimationFrame(tick);
 
-    pollTimer = setInterval(fetchMedia, 5000);
-
+    // WebSocket is the single source of truth
     cleanups.push(
-      api.on('media_changed', (msg) => {
-        if (msg.state) {
-          media = msg.state;
+      api.on('media_state', (msg: any) => {
+        // Update players list
+        if (Array.isArray(msg.players)) {
+          players = msg.players;
+        }
+
+        // Update media state (everything except position handled here)
+        const prev = media;
+        media = {
+          status: msg.status ?? 'stopped',
+          title: msg.title,
+          artist: msg.artist,
+          album: msg.album,
+          art_url: msg.art_url,
+          position_ms: msg.position_ms,
+          duration_ms: msg.duration_ms,
+          volume: msg.volume,
+          shuffle: msg.shuffle,
+          repeat: msg.repeat,
+          player_id: msg.player_id,
+        };
+
+        // Sync position interpolation base (unless user is seeking)
+        if (!seeking && msg.position_ms != null) {
+          serverPosition = msg.position_ms;
+          serverTimestamp = performance.now();
+          interpolatedPosition = msg.position_ms;
         }
       }),
-      api.on('media_progress', (msg) => {
-        if (!seeking && msg.position_ms !== undefined) {
-          media.position_ms = msg.position_ms;
-        }
-      }),
-      api.on('audio_level', (msg) => {
+
+      api.on('audio_level', (msg: any) => {
         if (Array.isArray(msg.bands)) {
           audioBands = msg.bands.map((v: number) => Math.max(0, Math.min(1, v ?? 0)));
         }
@@ -179,7 +163,7 @@
   });
 
   onDestroy(() => {
-    clearInterval(pollTimer);
+    if (rafId !== null) cancelAnimationFrame(rafId);
     cleanups.forEach((fn) => fn());
   });
 </script>
@@ -202,7 +186,7 @@
 
   <!-- Track info -->
   <div class="track-info">
-    <div class="track-title">{media.title || 'No media playing'}</div>
+    <div class="track-title">{media.title || 'NO MEDIA PLAYING'}</div>
     {#if media.artist}
       <div class="track-artist">{media.artist}</div>
     {/if}
@@ -221,24 +205,24 @@
         aria-label="Seek"
         aria-valuemin={0}
         aria-valuemax={duration}
-        aria-valuenow={elapsed}
-        onpointerdown={handleProgressPointerDown}
-        onpointermove={handleProgressPointerMove}
-        onpointerup={handleProgressPointerUp}
+        aria-valuenow={displayPosition}
+        onpointerdown={handleSeekDown}
+        onpointermove={handleSeekMove}
+        onpointerup={handleSeekUp}
       >
         <div class="progress-track">
           <div class="progress-fill" style="width: {progress}%"></div>
         </div>
       </div>
       <div class="time-labels">
-        <span>{formatTime(elapsed)}</span>
+        <span>{formatTime(displayPosition)}</span>
         <span>{formatTime(duration)}</span>
       </div>
     </div>
-  {:else if elapsed > 0}
+  {:else if displayPosition > 0}
     <div class="progress-section">
       <div class="time-labels" style="justify-content: center">
-        <span>{formatTime(elapsed)}</span>
+        <span>{formatTime(displayPosition)}</span>
       </div>
     </div>
   {/if}
@@ -251,7 +235,7 @@
     </button>
     {/if}
 
-    <button class="transport-text" onclick={() => transport('prev')} aria-label="Previous">
+    <button class="transport-text" onclick={() => action('prev')} aria-label="Previous">
       &#x27E8;&#x27E8;
     </button>
 
@@ -259,7 +243,7 @@
       &minus;15
     </button>
 
-    <button class="transport-text play" onclick={() => transport(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
+    <button class="transport-text play" onclick={() => action(isPlaying ? 'pause' : 'play')} aria-label={isPlaying ? 'Pause' : 'Play'}>
       {#if isPlaying}<span class="pause-icon"></span>{:else}<span class="play-icon"></span>{/if}
     </button>
 
@@ -267,7 +251,7 @@
       +15
     </button>
 
-    <button class="transport-text" onclick={() => transport('next')} aria-label="Next">
+    <button class="transport-text" onclick={() => action('next')} aria-label="Next">
       &#x27E9;&#x27E9;
     </button>
 
@@ -290,6 +274,7 @@
       step="0.01"
       value={displayVolume}
       oninput={handleVolumeInput}
+      onchange={handleVolumeChange}
       aria-label="Volume"
     />
     <span class="volume-value">{Math.round(displayVolume * 100)}</span>
@@ -299,7 +284,7 @@
   <!-- Audio spectrum visualizer -->
   <div class="spectrum">
     <div class="spectrum-bars">
-      {#each audioBands as level, i}
+      {#each audioBands as level}
         <div class="spectrum-col">
           <div class="spectrum-bar-wrap">
             <div
@@ -324,7 +309,6 @@
     touch-action: pan-y;
   }
 
-  /* Player selector */
   .player-selector {
     display: flex;
     gap: 0;
@@ -359,7 +343,6 @@
     border-bottom-color: #ff2d2d;
   }
 
-  /* Track info */
   .track-info {
     text-align: left;
     flex-shrink: 0;
@@ -397,7 +380,6 @@
     white-space: nowrap;
   }
 
-  /* Progress bar */
   .progress-section {
     flex-shrink: 0;
   }
@@ -419,7 +401,6 @@
   .progress-fill {
     height: 100%;
     background: #ffffff;
-    transition: width 0.1s linear;
   }
 
   .time-labels {
@@ -431,7 +412,6 @@
     margin-top: 4px;
   }
 
-  /* Transport controls */
   .transport {
     display: flex;
     align-items: center;
@@ -506,7 +486,6 @@
     color: #ff2d2d;
   }
 
-  /* Volume */
   .volume-section {
     display: flex;
     align-items: center;
@@ -558,7 +537,6 @@
     cursor: pointer;
   }
 
-  /* Spectrum visualizer */
   .spectrum {
     flex-shrink: 0;
     padding: 0 0 8px;
