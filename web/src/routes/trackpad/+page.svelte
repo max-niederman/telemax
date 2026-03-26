@@ -130,6 +130,11 @@
   function toggleKeyboard() {
     keyboardOpen = !keyboardOpen;
     if (keyboardOpen) {
+      // Seed with a space so backspace has something to act on
+      if (hiddenInput) {
+        hiddenInput.value = ' ';
+        hiddenInput.setSelectionRange(1, 1);
+      }
       // Must be synchronous within the click handler for iOS to open keyboard
       hiddenInput?.focus();
     } else {
@@ -175,31 +180,12 @@
   }
 
   function mapKey(key: string): string | null {
-    // Map browser key names to our protocol key names
-    const keyMap: Record<string, string> = {
-      'Enter': 'Return',
-      'Backspace': 'BackSpace',
-      'Tab': 'Tab',
-      'Escape': 'Escape',
-      ' ': 'space',
-      'ArrowUp': 'Up',
-      'ArrowDown': 'Down',
-      'ArrowLeft': 'Left',
-      'ArrowRight': 'Right',
-      'Delete': 'Delete',
-      'Home': 'Home',
-      'End': 'End',
-      'PageUp': 'Page_Up',
-      'PageDown': 'Page_Down',
-      'Control': null,
-      'Alt': null,
-      'Shift': null,
-      'Meta': null,
-    };
-
-    if (key in keyMap) return keyMap[key];
-    if (key.length === 1) return key;
-    return key;
+    // Pass through key names that the server keymap already handles directly.
+    // The server expects JavaScript KeyboardEvent.key values.
+    const suppress: string[] = ['Control', 'Alt', 'Shift', 'Meta'];
+    if (suppress.includes(key)) return null;
+    if (key.length === 1) return key; // letters, digits, space, punctuation
+    return key; // Enter, Backspace, Delete, ArrowUp, etc.
   }
 
   // Handle input events for mobile keyboards that don't fire proper key events
@@ -207,7 +193,6 @@
     const input = e.target as HTMLInputElement;
     const value = input.value;
     if (value) {
-      // Send each character as a key press+release
       for (const char of value) {
         api.send({
           type: 'key_press',
@@ -220,7 +205,22 @@
           modifiers: getActiveModifiers(),
         });
       }
-      input.value = '';
+      // Keep a placeholder so backspace works on empty input
+      input.value = ' ';
+      input.setSelectionRange(1, 1);
+    }
+  }
+
+  // Handle beforeinput for delete/backspace on mobile keyboards
+  function handleBeforeInput(e: InputEvent) {
+    if (e.inputType === 'deleteContentBackward') {
+      e.preventDefault();
+      api.send({ type: 'key_press', key: 'Backspace', modifiers: getActiveModifiers() });
+      api.send({ type: 'key_release', key: 'Backspace', modifiers: getActiveModifiers() });
+    } else if (e.inputType === 'deleteContentForward') {
+      e.preventDefault();
+      api.send({ type: 'key_press', key: 'Delete', modifiers: getActiveModifiers() });
+      api.send({ type: 'key_release', key: 'Delete', modifiers: getActiveModifiers() });
     }
   }
 
@@ -251,31 +251,6 @@
     </div>
   </div>
 
-  {#if keyboardOpen}
-    <div class="modifier-row">
-      <button
-        class="mod-key"
-        class:active={modifiers.ctrl}
-        onclick={() => toggleModifier('ctrl')}
-      >CTRL</button>
-      <button
-        class="mod-key"
-        class:active={modifiers.alt}
-        onclick={() => toggleModifier('alt')}
-      >ALT</button>
-      <button
-        class="mod-key"
-        class:active={modifiers.super_}
-        onclick={() => toggleModifier('super_')}
-      >SUPER</button>
-      <button
-        class="mod-key"
-        class:active={modifiers.shift}
-        onclick={() => toggleModifier('shift')}
-      >SHIFT</button>
-    </div>
-  {/if}
-
   <input
     bind:this={hiddenInput}
     class="hidden-input"
@@ -287,6 +262,7 @@
     onkeydown={handleKeyDown}
     onkeyup={handleKeyUp}
     oninput={handleInput}
+    onbeforeinput={handleBeforeInput}
   />
 
   <button class="keyboard-toggle" onclick={toggleKeyboard} class:active={keyboardOpen} aria-label="Toggle keyboard">
@@ -356,37 +332,6 @@
   }
 
   .keyboard-toggle.active {
-    color: #ff2d2d;
-  }
-
-  .modifier-row {
-    display: flex;
-    gap: 0;
-    border-top: 1px solid #333333;
-    flex-shrink: 0;
-  }
-
-  .mod-key {
-    flex: 1;
-    padding: 14px 0;
-    background: transparent;
-    border: none;
-    border-right: 1px solid #333333;
-    color: #666666;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    cursor: pointer;
-    text-align: center;
-  }
-
-  .mod-key:last-child {
-    border-right: none;
-  }
-
-  .mod-key.active {
     color: #ff2d2d;
   }
 

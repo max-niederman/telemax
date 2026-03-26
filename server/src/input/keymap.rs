@@ -68,11 +68,12 @@ pub fn js_key_to_linux(key: &str) -> Option<Key> {
         "ArrowRight" => Some(Key::Right),
 
         // Common keys
-        "Enter" => Some(Key::Enter),
+        "Enter" | "Return" => Some(Key::Enter),
         "Escape" => Some(Key::Esc),
-        "Backspace" => Some(Key::Backspace),
+        "Backspace" | "BackSpace" => Some(Key::Backspace),
         "Tab" => Some(Key::Tab),
-        " " => Some(Key::Space),
+        " " | "space" | "Space" => Some(Key::Space),
+        "Unidentified" => None,
 
         // Punctuation
         "-" => Some(Key::Minus),
