@@ -13,7 +13,6 @@
   let lastTouchCount = 0;
 
   // Keyboard state
-  let keyboardOpen = $state(false);
   let hiddenInput: HTMLInputElement;
   let modifiers = $state({
     ctrl: false,
@@ -127,19 +126,12 @@
     }
   }
 
-  function toggleKeyboard() {
-    keyboardOpen = !keyboardOpen;
-    if (keyboardOpen) {
-      // Seed with a space so backspace has something to act on
-      if (hiddenInput) {
-        hiddenInput.value = ' ';
-        hiddenInput.setSelectionRange(1, 1);
-      }
-      // Must be synchronous within the click handler for iOS to open keyboard
-      hiddenInput?.focus();
-    } else {
-      hiddenInput?.blur();
+  function openKeyboard() {
+    if (hiddenInput) {
+      hiddenInput.value = ' ';
+      hiddenInput.setSelectionRange(1, 1);
     }
+    hiddenInput?.focus();
   }
 
   function toggleModifier(mod: 'ctrl' | 'alt' | 'super_' | 'shift') {
@@ -265,10 +257,9 @@
     onkeyup={handleKeyUp}
     oninput={handleInput}
     onbeforeinput={handleBeforeInput}
-    onblur={() => { keyboardOpen = false; }}
   />
 
-  <button class="keyboard-toggle" onclick={toggleKeyboard} class:active={keyboardOpen} aria-label="Toggle keyboard">
+  <button class="keyboard-toggle" onclick={openKeyboard} aria-label="Open keyboard">
     KB
   </button>
 </div>
@@ -332,10 +323,6 @@
     cursor: pointer;
     padding: 12px;
     z-index: 10;
-  }
-
-  .keyboard-toggle.active {
-    color: #ff2d2d;
   }
 
   .hidden-input {
