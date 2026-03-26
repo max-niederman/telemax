@@ -370,7 +370,10 @@ async fn get_niri_windows() -> ApiResult<Json<serde_json::Value>> {
         .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", format!("Task join error: {e}")))?
         .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", e))?;
 
-    Ok(Json(serde_json::to_value(response).unwrap_or_default()))
+    // Unwrap Response::Windows(vec) to return just the array
+    let value = serde_json::to_value(&response).unwrap_or_default();
+    let inner = value.get("Windows").cloned().unwrap_or(value);
+    Ok(Json(inner))
 }
 
 async fn get_niri_workspaces() -> ApiResult<Json<serde_json::Value>> {
@@ -379,7 +382,9 @@ async fn get_niri_workspaces() -> ApiResult<Json<serde_json::Value>> {
         .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", format!("Task join error: {e}")))?
         .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", e))?;
 
-    Ok(Json(serde_json::to_value(response).unwrap_or_default()))
+    let value = serde_json::to_value(&response).unwrap_or_default();
+    let inner = value.get("Workspaces").cloned().unwrap_or(value);
+    Ok(Json(inner))
 }
 
 async fn get_niri_outputs() -> ApiResult<Json<serde_json::Value>> {
@@ -388,7 +393,9 @@ async fn get_niri_outputs() -> ApiResult<Json<serde_json::Value>> {
         .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", format!("Task join error: {e}")))?
         .map_err(|e| ApiError::unavailable("NIRI_UNAVAILABLE", e))?;
 
-    Ok(Json(serde_json::to_value(response).unwrap_or_default()))
+    let value = serde_json::to_value(&response).unwrap_or_default();
+    let inner = value.get("Outputs").cloned().unwrap_or(value);
+    Ok(Json(inner))
 }
 
 // ---------------------------------------------------------------------------

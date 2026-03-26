@@ -3,23 +3,6 @@
   import { api } from '$lib/api.svelte';
   import type { Settings } from '$lib/types';
 
-  const ALL_NIRI_ACTIONS = [
-    { name: 'close-window', label: 'Close Window' },
-    { name: 'fullscreen-window', label: 'Fullscreen Window' },
-    { name: 'maximize-column', label: 'Maximize Column' },
-    { name: 'toggle-window-floating', label: 'Toggle Floating' },
-    { name: 'switch-preset-column-width', label: 'Switch Column Width' },
-    { name: 'screenshot', label: 'Screenshot' },
-    { name: 'screenshot-screen', label: 'Screenshot Screen' },
-    { name: 'screenshot-window', label: 'Screenshot Window' },
-    { name: 'power-off-monitors', label: 'Power Off Monitors' },
-    { name: 'power-on-monitors', label: 'Power On Monitors' },
-    { name: 'focus-monitor-left', label: 'Focus Monitor Left' },
-    { name: 'focus-monitor-right', label: 'Focus Monitor Right' },
-    { name: 'move-window-to-monitor-left', label: 'Move Window to Monitor Left' },
-    { name: 'move-window-to-monitor-right', label: 'Move Window to Monitor Right' },
-  ];
-
   interface StatusInfo {
     tailscale_ip?: string;
     tailscale_name?: string;
@@ -79,21 +62,6 @@
 
   function toggleTheme() {
     settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
-    markDirty();
-  }
-
-  function toggleAction(name: string) {
-    const idx = settings.visible_actions.indexOf(name);
-    if (idx >= 0) {
-      settings.visible_actions = settings.visible_actions.filter((a) => a !== name);
-    } else {
-      settings.visible_actions = [...settings.visible_actions, name];
-    }
-    markDirty();
-  }
-
-  function handleAudioDevice(e: Event) {
-    settings.audio_device = (e.target as HTMLInputElement).value || undefined;
     markDirty();
   }
 
@@ -168,41 +136,6 @@
     </div>
   </section>
 
-  <!-- Action buttons config -->
-  <section class="setting-section">
-    <div class="section-header">VISIBLE ACTIONS</div>
-    <div class="setting-group">
-      {#each ALL_NIRI_ACTIONS as action}
-        <label class="checkbox-row">
-          <input
-            type="checkbox"
-            checked={settings.visible_actions.includes(action.name)}
-            onchange={() => toggleAction(action.name)}
-          />
-          <span class="checkbox-indicator">{settings.visible_actions.includes(action.name) ? '\u00D7' : '\u00B7'}</span>
-          <span class="checkbox-label">{action.label.toUpperCase()}</span>
-        </label>
-      {/each}
-    </div>
-  </section>
-
-  <!-- Audio device -->
-  <section class="setting-section">
-    <div class="section-header">AUDIO</div>
-    <div class="setting-group">
-      <div class="setting-row">
-        <span class="setting-name">AUDIO DEVICE</span>
-      </div>
-      <input
-        class="text-input"
-        type="text"
-        value={settings.audio_device ?? ''}
-        oninput={handleAudioDevice}
-        placeholder="Default device"
-      />
-    </div>
-  </section>
-
   <!-- Save button -->
   <div class="save-area">
     <button class="save-btn" class:dirty onclick={save} disabled={saving}>
@@ -250,7 +183,6 @@
     padding: 0 16px;
   }
 
-  /* Connection */
   .status-line {
     padding: 8px 0;
   }
@@ -288,7 +220,6 @@
     color: #ffffff;
   }
 
-  /* Setting rows */
   .setting-row {
     display: flex;
     align-items: center;
@@ -311,7 +242,6 @@
     font-weight: 500;
   }
 
-  /* Slider */
   .slider {
     width: 100%;
     -webkit-appearance: none;
@@ -339,7 +269,6 @@
     cursor: pointer;
   }
 
-  /* Toggle text */
   .toggle-text {
     background: transparent;
     border: none;
@@ -356,70 +285,6 @@
     color: #ff2d2d;
   }
 
-  /* Checkbox */
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
-    cursor: pointer;
-    border-bottom: 1px solid #1a1a1a;
-    min-height: 48px;
-  }
-
-  .checkbox-row:last-of-type {
-    border-bottom: none;
-  }
-
-  .checkbox-row input[type="checkbox"] {
-    display: none;
-  }
-
-  .checkbox-indicator {
-    font-size: 18px;
-    font-weight: 700;
-    color: #666666;
-    flex-shrink: 0;
-    width: 18px;
-    text-align: center;
-    line-height: 1;
-  }
-
-  .checkbox-row input:checked ~ .checkbox-indicator {
-    color: #ff2d2d;
-  }
-
-  .checkbox-label {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 12px;
-    font-weight: 300;
-    letter-spacing: 0.05em;
-    color: #ffffff;
-  }
-
-  .text-input {
-    width: 100%;
-    padding: 10px 0;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid #333333;
-    color: #ffffff;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    font-weight: 300;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .text-input:focus {
-    border-bottom-color: #ff2d2d;
-  }
-
-  .text-input::placeholder {
-    color: #333333;
-  }
-
-  /* Save button */
   .save-area {
     padding: 20px 16px;
     flex-shrink: 0;

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api.svelte';
-  import type { Settings } from '$lib/types';
 
   interface NiriWindow {
     id: number;
@@ -19,26 +18,23 @@
     output?: string;
   }
 
-  const ALL_ACTIONS: { name: string; label: string; icon: string }[] = [
-    { name: 'screenshot', label: 'Screenshot', icon: 'camera' },
-    { name: 'screenshot-screen', label: 'Screen Shot', icon: 'monitor' },
-    { name: 'screenshot-window', label: 'Window Shot', icon: 'square' },
-    { name: 'fullscreen-window', label: 'Fullscreen', icon: 'maximize' },
-    { name: 'maximize-column', label: 'Maximize', icon: 'expand' },
-    { name: 'toggle-window-floating', label: 'Float', icon: 'layers' },
-    { name: 'power-off-monitors', label: 'Monitors Off', icon: 'power-off' },
-    { name: 'power-on-monitors', label: 'Monitors On', icon: 'power-on' },
-    { name: 'close-window', label: 'Close Window', icon: 'x' },
-    { name: 'switch-preset-column-width', label: 'Column Width', icon: 'columns' },
-    { name: 'focus-monitor-left', label: 'Mon Left', icon: 'arrow-left' },
-    { name: 'focus-monitor-right', label: 'Mon Right', icon: 'arrow-right' },
-    { name: 'move-window-to-monitor-left', label: 'Move Left', icon: 'move-left' },
-    { name: 'move-window-to-monitor-right', label: 'Move Right', icon: 'move-right' },
+  const ALL_ACTIONS: { name: string; label: string }[] = [
+    { name: 'screenshot', label: 'Screenshot' },
+    { name: 'fullscreen-window', label: 'Fullscreen' },
+    { name: 'maximize-column', label: 'Maximize' },
+    { name: 'toggle-window-floating', label: 'Float' },
+    { name: 'power-off-monitors', label: 'Monitors Off' },
+    { name: 'power-on-monitors', label: 'Monitors On' },
+    { name: 'close-window', label: 'Close Window' },
+    { name: 'switch-preset-column-width', label: 'Column Width' },
+    { name: 'focus-monitor-left', label: 'Mon Left' },
+    { name: 'focus-monitor-right', label: 'Mon Right' },
+    { name: 'move-window-to-monitor-left', label: 'Move Left' },
+    { name: 'move-window-to-monitor-right', label: 'Move Right' },
   ];
 
   let windows = $state<NiriWindow[]>([]);
   let workspaces = $state<NiriWorkspace[]>([]);
-  let settings = $state<Settings | null>(null);
   let swipedWindowId = $state<number | null>(null);
   let cleanups: (() => void)[] = [];
 
@@ -56,22 +52,16 @@
     return map;
   });
 
-  let visibleActions = $derived(
-    ALL_ACTIONS.filter((a) =>
-      settings?.visible_actions?.includes(a.name) ?? true
-    )
-  );
+  let visibleActions = ALL_ACTIONS;
 
   async function fetchAll() {
     try {
-      const [w, ws, s] = await Promise.all([
+      const [w, ws] = await Promise.all([
         api.get<NiriWindow[]>('/niri/windows'),
         api.get<NiriWorkspace[]>('/niri/workspaces'),
-        api.get<Settings>('/settings'),
       ]);
       windows = w;
       workspaces = ws;
-      settings = s;
     } catch {
       // ignore
     }
