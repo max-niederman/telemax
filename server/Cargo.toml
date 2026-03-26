@@ -3,6 +3,14 @@ name = "telemax"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "telemax"
+path = "src/bin/telemax.rs"
+
+[[bin]]
+name = "plasma-integration-host"
+path = "src/bin/plasma_integration_host.rs"
+
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }

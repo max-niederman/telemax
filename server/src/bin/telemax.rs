@@ -1,13 +1,3 @@
-mod audio;
-mod auth;
-mod error;
-mod input;
-mod media;
-mod niri;
-mod settings;
-mod state;
-mod ws;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -23,9 +13,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::auth::{PairRequest, PairResponse, PairingState};
-use crate::error::{ApiError, ApiResult};
-use crate::state::AppState;
+use telemax::{audio, auth, error, input, media, niri, settings, state, ws};
+use telemax::auth::{PairRequest, PairResponse, PairingState};
+use telemax::error::{ApiError, ApiResult};
+use telemax::state::AppState;
 
 // ---------------------------------------------------------------------------
 // Status
