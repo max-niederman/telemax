@@ -71,6 +71,12 @@
         };
       }
     ) // {
+      overlays.default = final: prev: {
+        telemax = self.packages.${prev.system}.server;
+        telemax-web = self.packages.${prev.system}.web;
+        telemax-native-messaging-host = self.packages.${prev.system}.native-messaging-host;
+      };
+
       nixosModules.default = import ./module.nix self;
     };
 }

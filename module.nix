@@ -8,8 +8,6 @@ self:
 
 let
   cfg = config.services.telemax;
-  package = self.packages.${pkgs.system}.default;
-  webPackage = self.packages.${pkgs.system}.web;
 in
 {
   options.services.telemax = {
@@ -52,13 +50,13 @@ in
 
       environment = {
         TELEMAX_PORT = toString cfg.port;
-        TELEMAX_WEB_DIR = "${webPackage}";
+        TELEMAX_WEB_DIR = "${pkgs.telemax-web}";
         NIRI_SOCKET = "%t/niri-socket";
         RUST_LOG = "info";
       };
 
       serviceConfig = {
-        ExecStart = "${package}/bin/telemax";
+        ExecStart = "${pkgs.telemax}/bin/telemax";
         Restart = "on-failure";
         RestartSec = 5;
       };
