@@ -45,9 +45,20 @@ impl MediaController {
         let names = dbus_proxy.list_names().await?;
 
         let mut players = Vec::new();
+        let mut has_telemax_host = false;
+        for name in &names {
+            if name.as_str() == "org.mpris.MediaPlayer2.telemax" {
+                has_telemax_host = true;
+                break;
+            }
+        }
         for name in names {
             let name_str = name.as_str();
             if name_str.starts_with("org.mpris.MediaPlayer2.") {
+                // Skip Firefox/Zen built-in MPRIS when the telemax host provides better data
+                if has_telemax_host && (name_str.contains(".firefox.instance_") || name_str.contains(".zen.instance_") || name_str.contains(".zen-browser.instance_")) {
+                    continue;
+                }
                 let display_name = self.get_player_display_name(name_str).await;
                 players.push(PlayerInfo {
                     id: name_str.to_string(),

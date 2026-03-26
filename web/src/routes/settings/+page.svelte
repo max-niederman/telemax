@@ -123,19 +123,6 @@
     </div>
   </section>
 
-  <!-- Theme -->
-  <section class="setting-section">
-    <div class="section-header">APPEARANCE</div>
-    <div class="setting-group">
-      <div class="setting-row">
-        <span class="setting-name">THEME</span>
-        <button class="toggle-text" class:on={settings.theme === 'dark'} onclick={toggleTheme} aria-label="Toggle theme">
-          {settings.theme === 'dark' ? 'DARK' : 'LIGHT'}
-        </button>
-      </div>
-    </div>
-  </section>
-
   <!-- Save button -->
   <div class="save-area">
     <button class="save-btn" class:dirty onclick={save} disabled={saving}>

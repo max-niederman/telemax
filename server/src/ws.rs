@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::input::keymap;
 use crate::state::AppState;
+use input_linux::Key;
 
 #[derive(Deserialize)]
 #[serde(tag = "type")]
@@ -173,13 +174,29 @@ async fn handle_ws_input(
                     input.key_press(mod_key).await;
                 }
             }
-            // Then press the main key
-            if let Some(linux_key) = keymap::js_key_to_linux(key) {
+            // For single characters, use char_to_key_shifted to handle uppercase + symbols
+            let chars: Vec<char> = key.chars().collect();
+            if chars.len() == 1 {
+                if let Some((linux_key, needs_shift)) = keymap::char_to_key_shifted(chars[0]) {
+                    if needs_shift {
+                        input.key_press(Key::LeftShift).await;
+                    }
+                    input.key_press(linux_key).await;
+                }
+            } else if let Some(linux_key) = keymap::js_key_to_linux(key) {
                 input.key_press(linux_key).await;
             }
         }
         WsInput::KeyRelease { key } => {
-            if let Some(linux_key) = keymap::js_key_to_linux(key) {
+            let chars: Vec<char> = key.chars().collect();
+            if chars.len() == 1 {
+                if let Some((linux_key, needs_shift)) = keymap::char_to_key_shifted(chars[0]) {
+                    input.key_release(linux_key).await;
+                    if needs_shift {
+                        input.key_release(Key::LeftShift).await;
+                    }
+                }
+            } else if let Some(linux_key) = keymap::js_key_to_linux(key) {
                 input.key_release(linux_key).await;
             }
         }

@@ -69,7 +69,7 @@
 
   async function focusWorkspace(idx: number) {
     try {
-      await api.post('/niri/action', { action: 'focus-workspace', args: [String(idx)] });
+      await api.post('/niri/action', { action: 'focus-workspace', args: { index: idx } });
     } catch {
       // ignore
     }
@@ -77,7 +77,7 @@
 
   async function focusWindow(id: number) {
     try {
-      await api.post('/niri/action', { action: 'focus-window', args: [String(id)] });
+      await api.post('/niri/action', { action: 'focus-window', args: { id } });
     } catch {
       // ignore
     }
@@ -86,7 +86,7 @@
   async function closeWindow(id: number) {
     swipedWindowId = null;
     try {
-      await api.post('/niri/action', { action: 'close-window', args: [String(id)] });
+      await api.post('/niri/action', { action: 'close-window', args: { id } });
       windows = windows.filter((w) => w.id !== id);
     } catch {
       // ignore

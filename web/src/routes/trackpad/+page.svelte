@@ -192,8 +192,10 @@
   function handleInput(e: Event) {
     const input = e.target as HTMLInputElement;
     const value = input.value;
-    if (value) {
-      for (const char of value) {
+    // Only send characters beyond the seeded space placeholder
+    const newChars = value.replace(/^ /, '');
+    if (newChars) {
+      for (const char of newChars) {
         api.send({
           type: 'key_press',
           key: char,
@@ -205,10 +207,10 @@
           modifiers: getActiveModifiers(),
         });
       }
-      // Keep a placeholder so backspace works on empty input
-      input.value = ' ';
-      input.setSelectionRange(1, 1);
     }
+    // Reset to just the placeholder space
+    input.value = ' ';
+    input.setSelectionRange(1, 1);
   }
 
   // Handle beforeinput for delete/backspace on mobile keyboards
@@ -263,6 +265,7 @@
     onkeyup={handleKeyUp}
     oninput={handleInput}
     onbeforeinput={handleBeforeInput}
+    onblur={() => { keyboardOpen = false; }}
   />
 
   <button class="keyboard-toggle" onclick={toggleKeyboard} class:active={keyboardOpen} aria-label="Toggle keyboard">
