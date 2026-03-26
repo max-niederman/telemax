@@ -329,8 +329,14 @@
     display: flex;
     gap: 0;
     overflow-x: auto;
+    overflow-y: hidden;
     flex-shrink: 0;
     border-bottom: 1px solid #333333;
+    scrollbar-width: none;
+  }
+
+  .player-selector::-webkit-scrollbar {
+    display: none;
   }
 
   .player-tab {
