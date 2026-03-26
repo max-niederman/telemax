@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
@@ -14,7 +14,7 @@ use tokio::sync::{RwLock, broadcast};
 use tower_http::services::{ServeDir, ServeFile};
 
 use telemax::{audio, auth, error, input, media, niri, settings, state, ws};
-use telemax::auth::{PairRequest, PairResponse, PairingState};
+use telemax::auth::{PairRequest, PairPollResponse, PairingState, PollResult};
 use telemax::error::{ApiError, ApiResult};
 use telemax::state::AppState;
 
@@ -395,51 +395,62 @@ async fn get_niri_outputs() -> ApiResult<Json<serde_json::Value>> {
 // Pairing
 // ---------------------------------------------------------------------------
 
-async fn post_pair(
+/// Client registers a pairing request with a self-generated code.
+async fn post_pair_request(
     State(pairing): State<Arc<PairingState>>,
     Json(body): Json<PairRequest>,
 ) -> impl IntoResponse {
-    match pairing.pair(&body.code).await {
-        Some(token) => {
+    if body.code.len() != 6 || !body.code.chars().all(|c| c.is_ascii_digit()) {
+        return (StatusCode::BAD_REQUEST, Json(PairPollResponse {
+            status: "error".into(),
+            token: None,
+        })).into_response();
+    }
+    if pairing.register_request(&body.code).await {
+        (StatusCode::OK, Json(PairPollResponse {
+            status: "pending".into(),
+            token: None,
+        })).into_response()
+    } else {
+        (StatusCode::CONFLICT, Json(PairPollResponse {
+            status: "code_in_use".into(),
+            token: None,
+        })).into_response()
+    }
+}
+
+/// Client polls for approval of their pairing request.
+async fn post_pair_poll(
+    State(pairing): State<Arc<PairingState>>,
+    Json(body): Json<PairRequest>,
+) -> impl IntoResponse {
+    match pairing.poll(&body.code).await {
+        PollResult::Approved(token) => {
             let cookie = format!(
                 "telemax_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000"
             );
             (
                 StatusCode::OK,
-                [("set-cookie", cookie)],
-                Json(PairResponse { token }),
-            )
-                .into_response()
-        }
-        None => {
-            #[derive(Serialize)]
-            struct PairError {
-                error: PairErrorDetail,
-            }
-            #[derive(Serialize)]
-            struct PairErrorDetail {
-                code: &'static str,
-                message: &'static str,
-            }
-            (
-                StatusCode::FORBIDDEN,
-                Json(PairError {
-                    error: PairErrorDetail {
-                        code: "INVALID_CODE",
-                        message: "Invalid pairing code",
-                    },
+                [("set-cookie", cookie.as_str().to_owned())],
+                Json(PairPollResponse {
+                    status: "approved".into(),
+                    token: Some(token),
                 }),
-            )
-                .into_response()
+            ).into_response()
+        }
+        PollResult::Pending => {
+            (StatusCode::OK, Json(PairPollResponse {
+                status: "pending".into(),
+                token: None,
+            })).into_response()
+        }
+        PollResult::Expired | PollResult::NotFound => {
+            (StatusCode::GONE, Json(PairPollResponse {
+                status: "expired".into(),
+                token: None,
+            })).into_response()
         }
     }
-}
-
-async fn post_pair_refresh(
-    State(state): State<AppState>,
-) -> StatusCode {
-    state.pairing.refresh_code().await;
-    StatusCode::NO_CONTENT
 }
 
 // ---------------------------------------------------------------------------
@@ -454,11 +465,6 @@ async fn main() {
                 .unwrap_or_else(|_| "info".into()),
         )
         .init();
-
-    let port: u16 = std::env::var("TELEMAX_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(9876);
 
     let web_dir =
         std::env::var("TELEMAX_WEB_DIR").unwrap_or_else(|_| "./web/build".into());
@@ -493,8 +499,9 @@ async fn main() {
     let (audio_tx, _audio_rx) = broadcast::channel::<audio::AudioLevel>(64);
     audio::start_monitoring(audio_tx.clone());
 
-    // Create pairing state
+    // Create pairing state and start code socket
     let pairing = PairingState::new();
+    auth::start_code_socket(pairing.clone());
 
     // Build AppState
     let app_state = AppState {
@@ -533,8 +540,6 @@ async fn main() {
         .route("/api/niri/windows", get(get_niri_windows))
         .route("/api/niri/workspaces", get(get_niri_workspaces))
         .route("/api/niri/outputs", get(get_niri_outputs))
-        // Pair refresh (authenticated — lets paired clients pair another device)
-        .route("/api/pair/refresh", post(post_pair_refresh))
         // WebSocket
         .route("/api/ws", get(ws::ws_handler))
         // Auth middleware on all routes in this group
@@ -544,9 +549,10 @@ async fn main() {
         ))
         .with_state(app_state);
 
-    // Public routes (no auth)
+    // Public routes (no auth) — pairing flow
     let public_api = Router::new()
-        .route("/api/pair", post(post_pair))
+        .route("/api/pair/request", post(post_pair_request))
+        .route("/api/pair/poll", post(post_pair_poll))
         .with_state(pairing);
 
     // Combine everything
@@ -561,9 +567,15 @@ async fn main() {
                 .not_found_service(ServeFile::new(format!("{web_dir}/index.html"))),
         );
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    tracing::info!("listening on {}", addr);
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| "/tmp".into());
+    let sock_path = PathBuf::from(&runtime_dir).join("telemax.sock");
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    // Remove stale socket
+    let _ = std::fs::remove_file(&sock_path);
+
+    let listener = tokio::net::UnixListener::bind(&sock_path).unwrap();
+    tracing::info!("listening on {}", sock_path.display());
+
     axum::serve(listener, app).await.unwrap();
 }

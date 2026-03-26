@@ -97,19 +97,37 @@ export class ApiClient {
     return res.json();
   }
 
-  async pair(code: string): Promise<boolean> {
-    const res = await fetch(`${base}/api/pair`, {
+  /** Generate a random 6-digit code */
+  generateCode(): string {
+    return String(Math.floor(Math.random() * 1000000)).padStart(6, '0');
+  }
+
+  /** Register a pairing request with the server */
+  async requestPairing(code: string): Promise<boolean> {
+    const res = await fetch(`${base}/api/pair/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
     });
-    if (!res.ok) return false;
+    return res.ok;
+  }
+
+  /** Poll for pairing approval. Returns token if approved, null if pending, throws on expiry */
+  async pollPairing(code: string): Promise<string | null> {
+    const res = await fetch(`${base}/api/pair/poll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
     const data = await res.json();
-    if (data.token) {
+    if (data.status === 'approved' && data.token) {
       this.setToken(data.token);
-      return true;
+      return data.token;
     }
-    return false;
+    if (data.status === 'expired' || !res.ok) {
+      throw new Error('expired');
+    }
+    return null; // still pending
   }
 
   async checkAuth(): Promise<void> {

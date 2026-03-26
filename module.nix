@@ -12,12 +12,6 @@ in
 {
   options.services.telemax = {
     enable = lib.mkEnableOption "telemax desktop remote control";
-
-    port = lib.mkOption {
-      type = lib.types.port;
-      default = 9876;
-      description = "Port for the HTTP server (binds 127.0.0.1 only)";
-    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -28,7 +22,7 @@ in
       KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="uinput"
     '';
 
-    # Tailscale Serve on sub-path /telemax
+    # Tailscale Serve proxying to the user's Unix socket
     systemd.services.telemax-serve = {
       description = "Tailscale Serve for telemax";
       wantedBy = [ "multi-user.target" ];
@@ -38,7 +32,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${pkgs.tailscale}/bin/tailscale serve --set-path /telemax --bg ${toString cfg.port}";
+        ExecStart = "${pkgs.tailscale}/bin/tailscale serve --set-path /telemax --bg unix:/run/user/1000/telemax.sock";
         ExecStop = "${pkgs.tailscale}/bin/tailscale serve --set-path /telemax off";
       };
     };
@@ -49,7 +43,6 @@ in
       after = [ "graphical-session.target" ];
 
       environment = {
-        TELEMAX_PORT = toString cfg.port;
         TELEMAX_WEB_DIR = "${pkgs.telemax-web}";
         NIRI_SOCKET = "%t/niri-socket";
         RUST_LOG = "info";

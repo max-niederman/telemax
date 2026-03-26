@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{
-    extract::Request,
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -11,10 +12,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::RwLock;
 
-/// Hash a raw token to produce the stored form.
-/// Only the hash is persisted; the raw token is only held by the client.
 fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
@@ -32,20 +32,29 @@ struct ErrorDetail {
     message: &'static str,
 }
 
+/// A pending pairing request from a client device.
+struct PendingPair {
+    /// The session token (raw) once approved, None while pending.
+    token: Option<String>,
+    /// When this request was created.
+    created: Instant,
+}
+
+const PAIR_TTL_SECS: u64 = 300; // 5 minutes
+
 pub struct PairingState {
-    pub code: RwLock<String>,
+    /// Active session token hashes.
     pub sessions: RwLock<HashSet<String>>,
+    /// Pending pairing requests: code -> PendingPair.
+    pending: RwLock<HashMap<String, PendingPair>>,
 }
 
 impl PairingState {
     pub fn new() -> Arc<Self> {
         let sessions = load_sessions();
-        let code = generate_code();
-        show_pairing_code(&code);
-
         Arc::new(Self {
-            code: RwLock::new(code),
             sessions: RwLock::new(sessions),
+            pending: RwLock::new(HashMap::new()),
         })
     }
 
@@ -54,41 +63,120 @@ impl PairingState {
         self.sessions.read().await.contains(&hashed)
     }
 
-    pub async fn pair(&self, submitted_code: &str) -> Option<String> {
-        let mut code = self.code.write().await;
-        if submitted_code != *code {
-            return None;
+    /// Register a pending pairing request with a client-generated code.
+    /// Returns false if the code is already pending.
+    pub async fn register_request(&self, code: &str) -> bool {
+        let mut pending = self.pending.write().await;
+        // Clean expired
+        pending.retain(|_, p| p.created.elapsed().as_secs() < PAIR_TTL_SECS);
+
+        if pending.contains_key(code) {
+            return false;
         }
-        // Code matched — generate session token, store only the hash
-        let token = uuid::Uuid::new_v4().to_string();
-        let hashed = hash_token(&token);
-        self.sessions.write().await.insert(hashed);
-        save_sessions(&self.sessions).await;
-        *code = generate_code();
-        show_pairing_code(&code);
-        Some(token)
+        pending.insert(code.to_string(), PendingPair {
+            token: None,
+            created: Instant::now(),
+        });
+        true
     }
 
-    pub async fn refresh_code(&self) {
-        let mut code = self.code.write().await;
-        *code = generate_code();
-        show_pairing_code(&code);
+    /// Approve a pending request (called from the local socket).
+    /// Returns true if the code was found and approved.
+    pub async fn approve(&self, code: &str) -> bool {
+        let mut pending = self.pending.write().await;
+        if let Some(req) = pending.get_mut(code) {
+            if req.token.is_some() {
+                return false; // already approved
+            }
+            let token = uuid::Uuid::new_v4().to_string();
+            let hashed = hash_token(&token);
+            self.sessions.write().await.insert(hashed);
+            save_sessions(&self.sessions).await;
+            req.token = Some(token);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Poll for the result of a pairing request.
+    /// Returns Some(token) if approved, None if still pending or expired.
+    pub async fn poll(&self, code: &str) -> PollResult {
+        let mut pending = self.pending.write().await;
+        match pending.get(code) {
+            Some(req) if req.created.elapsed().as_secs() >= PAIR_TTL_SECS => {
+                pending.remove(code);
+                PollResult::Expired
+            }
+            Some(req) => match &req.token {
+                Some(token) => {
+                    let token = token.clone();
+                    pending.remove(code);
+                    PollResult::Approved(token)
+                }
+                None => PollResult::Pending,
+            },
+            None => PollResult::NotFound,
+        }
     }
 }
 
-fn generate_code() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let n: u32 = rng.gen_range(0..1_000_000);
-    format!("{n:06}")
+pub enum PollResult {
+    Pending,
+    Approved(String),
+    Expired,
+    NotFound,
 }
 
-fn show_pairing_code(code: &str) {
-    tracing::info!("Pairing code: {code}");
-    let _ = std::process::Command::new("notify-send")
-        .arg("Telemax Pairing Code")
-        .arg(code)
-        .spawn();
+/// Listen on the pairing socket. When a client writes a code, approve it.
+pub fn start_code_socket(pairing: Arc<PairingState>) {
+    use tokio::net::UnixListener;
+
+    tokio::spawn(async move {
+        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+            .unwrap_or_else(|_| "/tmp".into());
+        let sock_path = PathBuf::from(&runtime_dir).join("telemax-code.sock");
+
+        let _ = std::fs::remove_file(&sock_path);
+
+        let listener = match UnixListener::bind(&sock_path) {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::error!("Failed to bind telemax-code.sock: {e}");
+                return;
+            }
+        };
+        tracing::info!("Pairing socket: {}", sock_path.display());
+
+        loop {
+            match listener.accept().await {
+                Ok((stream, _)) => {
+                    let pairing = pairing.clone();
+                    tokio::spawn(async move {
+                        let (reader, mut writer) = tokio::io::split(stream);
+                        let mut reader = BufReader::new(reader);
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).await.is_ok() {
+                            let code = line.trim();
+                            if code.is_empty() {
+                                let _ = writer.write_all(b"ERR empty code\n").await;
+                                return;
+                            }
+                            if pairing.approve(code).await {
+                                let _ = writer.write_all(b"OK paired\n").await;
+                                tracing::info!("Pairing approved for code {code}");
+                            } else {
+                                let _ = writer.write_all(b"ERR no matching request\n").await;
+                            }
+                        }
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!("Code socket accept error: {e}");
+                }
+            }
+        }
+    });
 }
 
 fn sessions_path() -> PathBuf {
@@ -124,16 +212,12 @@ async fn save_sessions(sessions: &RwLock<HashSet<String>>) {
     }
 }
 
-/// Extract a session token from either the Authorization header or the telemax_session cookie.
 fn extract_token(req: &Request) -> Option<String> {
-    // Check Authorization: Bearer <token>
     if let Some(auth) = req.headers().get("authorization").and_then(|v| v.to_str().ok()) {
         if let Some(token) = auth.strip_prefix("Bearer ") {
             return Some(token.to_string());
         }
     }
-
-    // Check cookie
     if let Some(cookie_header) = req.headers().get("cookie").and_then(|v| v.to_str().ok()) {
         for cookie in cookie_header.split(';') {
             let cookie = cookie.trim();
@@ -142,7 +226,6 @@ fn extract_token(req: &Request) -> Option<String> {
             }
         }
     }
-
     None
 }
 
@@ -168,14 +251,14 @@ pub async fn require_auth(
     }
 }
 
-use axum::extract::State;
-
 #[derive(Deserialize)]
 pub struct PairRequest {
     pub code: String,
 }
 
 #[derive(Serialize)]
-pub struct PairResponse {
-    pub token: String,
+pub struct PairPollResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
