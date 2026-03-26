@@ -1,6 +1,7 @@
 /target
 /result
 /server/target
+/host/target
 /web/node_modules
 /web/.svelte-kit
 /web/build

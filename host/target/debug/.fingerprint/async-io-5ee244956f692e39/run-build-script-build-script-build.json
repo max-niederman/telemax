@@ -1,1 +1,0 @@
-{"rustc":5491010472618359864,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[15550619062825872913,"build_script_build",false,2646191792897503481]],"local":[{"Precalculated":"2.6.0"}],"rustflags":["-Clink-arg=-fuse-ld=/nix/store/q2vpbpf8vqzizz6836vlw3n83cjr8bma-mold-unwrapped-wrapper-2.40.4/bin/mold","-Ctarget-cpu=native"],"config":0,"compile_kind":0}
