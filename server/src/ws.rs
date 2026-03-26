@@ -42,8 +42,12 @@ enum WsOutput {
         state: crate::media::MediaState,
         players: Vec<crate::media::PlayerInfo>,
     },
-    #[serde(rename = "niri_event")]
-    NiriEvent { event: serde_json::Value },
+    #[serde(rename = "niri_state")]
+    NiriState {
+        windows: serde_json::Value,
+        workspaces: serde_json::Value,
+        outputs: serde_json::Value,
+    },
 }
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -128,6 +132,48 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     });
 
+    // Sender task 3: Niri state — poll at 1Hz, send on change
+    let niri_out_tx = out_tx.clone();
+    let niri_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+        let mut last_hash: u64 = 0;
+        loop {
+            interval.tick().await;
+            let (w, ws, o) = tokio::join!(
+                tokio::task::spawn_blocking(crate::niri::get_windows),
+                tokio::task::spawn_blocking(crate::niri::get_workspaces),
+                tokio::task::spawn_blocking(crate::niri::get_outputs),
+            );
+            let Ok(Ok(w)) = w else { continue };
+            let Ok(Ok(ws)) = ws else { continue };
+            let Ok(Ok(o)) = o else { continue };
+
+            let w_val = serde_json::to_value(&w).unwrap_or_default();
+            let ws_val = serde_json::to_value(&ws).unwrap_or_default();
+            let o_val = serde_json::to_value(&o).unwrap_or_default();
+
+            // Unwrap Response enum wrappers
+            let windows = w_val.get("Windows").cloned().unwrap_or(w_val);
+            let workspaces = ws_val.get("Workspaces").cloned().unwrap_or(ws_val);
+            let outputs = o_val.get("Outputs").cloned().unwrap_or(o_val);
+
+            // Simple hash to detect changes
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            let combined = format!("{}{}{}", windows, workspaces, outputs);
+            combined.hash(&mut hasher);
+            let hash = hasher.finish();
+
+            if hash != last_hash {
+                last_hash = hash;
+                let msg = WsOutput::NiriState { windows, workspaces, outputs };
+                if niri_out_tx.send(msg).await.is_err() {
+                    break;
+                }
+            }
+        }
+    });
+
     // Receiver task: parse incoming WsInput messages
     let input = state.input.clone();
     let settings = state.settings.clone();
@@ -155,6 +201,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     send_task.abort();
     audio_task.abort();
     media_task.abort();
+    niri_task.abort();
 }
 
 async fn handle_ws_input(

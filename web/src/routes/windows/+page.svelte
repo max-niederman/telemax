@@ -166,12 +166,17 @@
 
   async function focusWindow(id: number) {
     api.post('/niri/action', { action: 'focus-window', args: { id } }).catch(() => {});
-    setTimeout(fetchAll, 300);
   }
 
   onMount(() => {
-    fetchAll();
-    cleanups.push(api.on('niri_event', () => fetchAll()));
+    fetchAll(); // initial load, then WebSocket takes over
+    cleanups.push(
+      api.on('niri_state', (msg: any) => {
+        if (Array.isArray(msg.windows)) windows = msg.windows;
+        if (Array.isArray(msg.workspaces)) workspaces = msg.workspaces;
+        if (msg.outputs && typeof msg.outputs === 'object' && !Array.isArray(msg.outputs)) outputs = msg.outputs;
+      })
+    );
     if (containerEl) {
       containerWidth = containerEl.clientWidth;
       const ro = new ResizeObserver(([entry]) => {
