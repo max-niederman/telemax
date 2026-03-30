@@ -15,12 +15,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    users.groups.uinput = { };
-    users.users.max.extraGroups = [ "uinput" ];
-
-    services.udev.extraRules = ''
-      KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="uinput"
-    '';
+    hardware.uinput.enable = true;
 
     # Tailscale Serve proxying to the user's Unix socket
     systemd.services.telemax-serve = {
